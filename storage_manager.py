@@ -7,7 +7,7 @@ class StorageManager:
     """Store tables, data, and index using BTree"""
 
     # TODO: add implementation to store tables as two tables - TABLES, COLUMNS
-    # TODO: handle primary key and duplicates (idk if it should be here or in other managers)
+    # TODO: handle SORT BY (probably will be in optimizer later)
 
     def __init__(self, db_file="./data/database.dat", index_file="./data/index.db"):
         self.db_file = db_file
