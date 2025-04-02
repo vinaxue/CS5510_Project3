@@ -4,7 +4,12 @@ from BTrees.OOBTree import OOBTree
 
 
 class StorageManager:
-    def __init__(self, db_file="database.dat", index_file="index.db"):
+    """Store tables, data, and index using BTree"""
+
+    # TODO: add implementation to store tables as two tables - TABLES, COLUMNS
+    # TODO: handle primary key and duplicates (idk if it should be here or in other managers)
+
+    def __init__(self, db_file="./data/database.dat", index_file="./data/index.db"):
         self.db_file = db_file
         self.index_file = index_file
 
