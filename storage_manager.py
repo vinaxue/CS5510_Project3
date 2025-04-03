@@ -16,11 +16,12 @@ class StorageManager:
         if not os.path.exists(self.db_file):
             with open(self.db_file, "wb") as f:
                 pickle.dump(
-                    {"TABLES": {}, "COLUMNS": {}, "DATA": {}}, f
+                    {"TABLES": {}, "COLUMNS": {}, "DATA": {}, "FOREIGN_KEYS": {}}, f
                 )  # System tables
 
         # Initialize index (B-Tree)
         self.index = self.load_index()
+        self.db = self.load_db()
 
     def load_index(self):
         """Loads the B-Tree index for fast lookups"""

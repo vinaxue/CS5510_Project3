@@ -11,7 +11,7 @@ class DDLManager:
 
     def reload(self):
         """Reloads the latest data and index"""
-        self.storage_manager.load_data()
+        self.storage_manager.load_db()
         self.storage_manager.load_index()
 
     def create_table(self, table_name, columns, primary_key, foreign_keys=None):
@@ -40,7 +40,10 @@ class DDLManager:
 
         # Store foreign key relationships
         if foreign_keys:
-            self.db["FOREIGN_KEYS"][table_name] = foreign_keys
+            self.db["FOREIGN_KEYS"][table_name] = {
+                col: {"referenced_table": ref_table, "referenced_column": ref_col}
+                for col, ref_table, ref_col in foreign_keys
+            }
 
         # Save the database and index state
         self.storage_manager.save_db(self.db)
