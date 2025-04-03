@@ -49,12 +49,14 @@ class TestDDLManager(unittest.TestCase):
             primary_key="id",
             foreign_keys=[("dept_id", "departments", "id")],
         )
-
         db = self.storage.load_db()
         self.assertIn("employees", db["TABLES"])
         self.assertIn("FOREIGN_KEYS", db)
+        self.assertIsInstance(db["FOREIGN_KEYS"], dict)
+        self.assertIn("employees", db["FOREIGN_KEYS"])
         self.assertEqual(
-            db["FOREIGN_KEYS"]["employees"], [("dept_id", "departments", "id")]
+            db["FOREIGN_KEYS"]["employees"],
+            {"dept_id": {"referenced_table": "departments", "referenced_column": "id"}},
         )
 
 
