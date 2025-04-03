@@ -19,6 +19,7 @@ class TestDDLManager(unittest.TestCase):
         if os.path.exists(self.index_file):
             os.remove(self.index_file)
 
+    ########################## CREATE TABLE ##########################
     def test_create_table(self):
         """Test creating a new table"""
         self.ddl_manager.create_table(
@@ -58,6 +59,34 @@ class TestDDLManager(unittest.TestCase):
             db["FOREIGN_KEYS"]["employees"],
             {"dept_id": {"referenced_table": "departments", "referenced_column": "id"}},
         )
+
+    ########################## DROP TABLE ##########################
+    def test_drop_table(self):
+        """Test dropping an existing table"""
+        self.ddl_manager.create_table("users", ["id", "name"], primary_key="id")
+        self.ddl_manager.drop_table("users")
+        db = self.storage.load_db()
+        self.assertNotIn("users", db["TABLES"])
+        self.assertNotIn("users", db["COLUMNS"])
+        self.assertNotIn("users", db["DATA"])
+        self.assertNotIn("users", self.storage.index)
+
+    def test_drop_nonexistent_table(self):
+        """Test dropping a table that does not exist raises an error"""
+        with self.assertRaises(ValueError):
+            self.ddl_manager.drop_table("nonexistent_table")
+
+    def test_drop_table_with_foreign_key_dependency(self):
+        """Test dropping a table that is referenced by a foreign key raises an error"""
+        self.ddl_manager.create_table("departments", ["id", "name"], primary_key="id")
+        self.ddl_manager.create_table(
+            "employees",
+            ["id", "name", "dept_id"],
+            primary_key="id",
+            foreign_keys=[("dept_id", "departments", "id")],
+        )
+        with self.assertRaises(ValueError):
+            self.ddl_manager.drop_table("departments")
 
 
 if __name__ == "__main__":

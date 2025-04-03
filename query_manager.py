@@ -1,28 +1,55 @@
 from pyparsing import (
-    CaselessKeyword, Word, alphas, alphanums, delimitedList, Group,
-    Optional, Forward, oneOf, quotedString, removeQuotes, Suppress, nums,
-    Combine, OneOrMore, ZeroOrMore
+    CaselessKeyword,
+    Word,
+    alphas,
+    alphanums,
+    delimitedList,
+    Group,
+    Optional,
+    Forward,
+    oneOf,
+    quotedString,
+    removeQuotes,
+    Suppress,
+    nums,
+    Combine,
+    OneOrMore,
+    ZeroOrMore,
 )
+
 
 class QueryManager:
     def __init__(self):
         self.identifier = Word(alphas, alphanums + "_").setName("identifier")
-        self.qualified_identifier = Combine(self.identifier + ZeroOrMore("." + self.identifier))   
+        self.qualified_identifier = Combine(
+            self.identifier + ZeroOrMore("." + self.identifier)
+        )
         integer = Word(nums)
         self.numeric_literal = Combine(Optional(oneOf("+ -")) + integer)
         self.string_literal = quotedString.setParseAction(removeQuotes)
         self.constant = self.numeric_literal | self.string_literal
         (
-            self.SELECT, self.FROM, self.WHERE, self.GROUP, self.BY,
-            self.ORDER, self.INSERT, self.INTO, self.VALUES, self.JOIN, self.ON,
+            self.SELECT,
+            self.FROM,
+            self.WHERE,
+            self.GROUP,
+            self.BY,
+            self.ORDER,
+            self.INSERT,
+            self.INTO,
+            self.VALUES,
+            self.JOIN,
+            self.ON,
         ) = map(
             CaselessKeyword,
             "SELECT FROM WHERE GROUP BY ORDER INSERT INTO VALUES JOIN ON".split(),
         )
-        self.column_name = self.qualified_identifier  
+        self.column_name = self.qualified_identifier
         self.column_list = Group(delimitedList(self.column_name))
-        self.table_name = self.identifier 
-        self.join_condition = Group(self.ON + self.qualified_identifier + "=" + self.qualified_identifier)
+        self.table_name = self.identifier
+        self.join_condition = Group(
+            self.ON + self.qualified_identifier + "=" + self.qualified_identifier
+        )
         self.join_clause = Group(self.JOIN + self.table_name + self.join_condition)
         self.table_with_joins = Group(
             self.table_name + Optional(OneOrMore(self.join_clause))
@@ -31,7 +58,7 @@ class QueryManager:
         self.select_stmt = Forward()
         self.where_condition = Group(
             self.WHERE
-            + self.qualified_identifier  
+            + self.qualified_identifier
             + oneOf("= > < >= <=")
             + (self.constant | self.qualified_identifier)
         )
@@ -77,7 +104,6 @@ if __name__ == "__main__":
 
     examples = [
         """SELECT id, name FROM users JOIN orders ON users.id = orders.user_id WHERE age >= 18 GROUP BY country ORDER BY name"""
-       
     ]
 
     for sql in examples:

@@ -48,3 +48,32 @@ class DDLManager:
         # Save the database and index state
         self.storage_manager.save_db(self.db)
         self.storage_manager.save_index()
+
+    def drop_table(self, table_name):
+        """Drops a table and removes its data and index"""
+        self.reload()
+
+        # Check if table exists
+        if table_name not in self.db["TABLES"]:
+            raise ValueError(f"Table '{table_name}' does not exist")
+
+        # Check if the table is referenced in any foreign key constraints
+        for tbl, fks in self.db["FOREIGN_KEYS"].items():
+            for col, ref in fks.items():
+                if ref["referenced_table"] == table_name:
+                    raise ValueError(
+                        f"Cannot drop table '{table_name}': It is referenced by '{tbl}'."
+                    )
+
+        # Remove table metadata
+        self.db["TABLES"].pop(table_name, None)
+        self.db["COLUMNS"].pop(table_name, None)
+        self.db["DATA"].pop(table_name, None)
+        self.db["FOREIGN_KEYS"].pop(table_name, None)  # Remove if exists
+
+        # Remove table indexes
+        self.index.pop(table_name, None)
+
+        # Save changes
+        self.storage_manager.save_db(self.db)
+        self.storage_manager.save_index()
