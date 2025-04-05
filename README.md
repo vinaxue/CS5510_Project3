@@ -8,10 +8,14 @@
 
 ### Supported features:
 
-1. CREATE TABLE
-   - primary key and foreign key support
-2. DROP TABLE
-   - doesn't allow drop if any columns of the table is referenced through foreign key
+- DDL
+  1. CREATE TABLE
+     - primary key and foreign key support
+     - default index on the primary key
+  2. DROP TABLE
+     - allow drop if any columns of the table is referenced through foreign key
+  3. CREATE INDEX
+  4. DROP INDEX
 
 ### Run unit tests:
 

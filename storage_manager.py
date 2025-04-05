@@ -43,7 +43,7 @@ class StorageManager:
         with open(self.db_file, "rb") as f:
             return pickle.load(f)
 
-    def save_db(self, db):
+    def save_db(self):
         """Saves the database file"""
         with open(self.db_file, "wb") as f:
-            pickle.dump(db, f)
+            pickle.dump(self.db, f)

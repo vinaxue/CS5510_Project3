@@ -33,9 +33,9 @@ class TestStorageManager(unittest.TestCase):
 
     def test_save_and_load_db(self):
         """Test saving and loading the database"""
-        db = self.storage.load_db()
+        db = self.storage.db
         db["TABLES"]["test_table"] = {"name": "test_table"}
-        self.storage.save_db(db)
+        self.storage.save_db()
         loaded_db = self.storage.load_db()
         self.assertEqual(loaded_db["TABLES"], {"test_table": {"name": "test_table"}})
 

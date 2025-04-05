@@ -14,6 +14,57 @@ class DDLManager:
         self.storage_manager.load_db()
         self.storage_manager.load_index()
 
+    def create_index(self, table_name, column_name):
+        """Creates an index on a specified column of a table"""
+        self.reload()
+
+        # Validate table and column
+        if table_name not in self.db["TABLES"]:
+            raise ValueError(f"Table '{table_name}' does not exist")
+        if column_name not in self.db["COLUMNS"][table_name]:
+            raise ValueError(
+                f"Column '{column_name}' does not exist in table '{table_name}'"
+            )
+
+        if table_name not in self.index:
+            self.index[table_name] = {}
+
+        if column_name not in self.index[table_name]:
+            self.index[table_name][column_name] = OOBTree()
+
+        # Populate the index with existing data if any
+        col_index = self.db["COLUMNS"][table_name].index(column_name)
+        for row_id, row in enumerate(self.db["DATA"][table_name]):
+            value = row[col_index]
+            if value not in self.index[table_name][column_name]:
+                self.index[table_name][column_name][value] = []
+            self.index[table_name][column_name][value].append(row_id)
+
+        # Save index
+        self.storage_manager.save_index()
+
+    def drop_index(self, table_name, column_name):
+        """Drops an index on a specified column of a table"""
+        self.reload()
+
+        # Validate table and column
+        if table_name not in self.db["TABLES"]:
+            raise ValueError(f"Table '{table_name}' does not exist")
+        if column_name not in self.db["COLUMNS"][table_name]:
+            raise ValueError(
+                f"Column '{column_name}' does not exist in table '{table_name}'"
+            )
+
+        # Check if the column has an index
+        if table_name in self.index and column_name in self.index[table_name]:
+            self.index[table_name].pop(column_name)
+        else:
+            raise ValueError(
+                f"No index found on column '{column_name}' in table '{table_name}'"
+            )
+
+        self.storage_manager.save_index()
+
     def create_table(self, table_name, columns, primary_key, foreign_keys=None):
         """
         Creates a new table with specified columns, primary key, and foreign keys.
@@ -34,9 +85,11 @@ class DDLManager:
         self.db["COLUMNS"][table_name] = columns
         self.db["DATA"][table_name] = []
 
-        # Initialize indexes for all columns
-        # Store the column indexes as a BTree
-        self.index[table_name] = {col: OOBTree() for col in columns}
+        # Initialize index dictionary for the table
+        self.index[table_name] = {}
+
+        # Create index only for the primary key
+        self.create_index(table_name, primary_key)
 
         # Store foreign key relationships
         if foreign_keys:
@@ -46,7 +99,7 @@ class DDLManager:
             }
 
         # Save the database and index state
-        self.storage_manager.save_db(self.db)
+        self.storage_manager.save_db()
         self.storage_manager.save_index()
 
     def drop_table(self, table_name):
@@ -75,5 +128,5 @@ class DDLManager:
         self.index.pop(table_name, None)
 
         # Save changes
-        self.storage_manager.save_db(self.db)
+        self.storage_manager.save_db()
         self.storage_manager.save_index()

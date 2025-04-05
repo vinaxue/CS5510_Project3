@@ -2,6 +2,7 @@ import os
 import unittest
 from storage_manager import StorageManager
 from ddl_manager import DDLManager
+from BTrees.OOBTree import OOBTree
 
 
 class TestDDLManager(unittest.TestCase):
@@ -21,7 +22,8 @@ class TestDDLManager(unittest.TestCase):
 
     ########################## CREATE TABLE ##########################
     def test_create_table(self):
-        """Test creating a new table"""
+        """Test creating a new table and check if primary key index is created"""
+        # Create table with primary key
         self.ddl_manager.create_table(
             "users", ["id", "name", "email"], primary_key="id"
         )
@@ -30,10 +32,16 @@ class TestDDLManager(unittest.TestCase):
         self.assertIn("users", db["TABLES"])
         self.assertEqual(db["TABLES"]["users"]["primary_key"], "id")
         self.assertEqual(db["COLUMNS"]["users"], ["id", "name", "email"])
+
+        # Check if the index exists for the primary key column
         self.assertIn("users", self.storage.index)
-        self.assertIn("id", self.storage.index["users"])
-        self.assertIn("name", self.storage.index["users"])
-        self.assertIn("email", self.storage.index["users"])
+        self.assertIn(
+            "id", self.storage.index["users"]
+        )  # Index should be created on primary key
+        self.assertNotIn(
+            "name", self.storage.index["users"]
+        )  # No index should be created on non-primary key columns
+        self.assertNotIn("email", self.storage.index["users"])
 
     def test_create_duplicate_table(self):
         """Test creating a duplicate table raises an error"""
@@ -59,6 +67,10 @@ class TestDDLManager(unittest.TestCase):
             db["FOREIGN_KEYS"]["employees"],
             {"dept_id": {"referenced_table": "departments", "referenced_column": "id"}},
         )
+
+        # Check that primary key index exists for "employees" table
+        self.assertIn("employees", self.storage.index)
+        self.assertIn("id", self.storage.index["employees"])  # Index on primary key
 
     ########################## DROP TABLE ##########################
     def test_drop_table(self):
@@ -87,6 +99,105 @@ class TestDDLManager(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             self.ddl_manager.drop_table("departments")
+
+    ########################## CREATE INDEX ##########################
+    def test_create_index(self):
+        """Test creating an index on an existing column"""
+        # Create table and insert data
+        self.ddl_manager.create_table(
+            "users", ["id", "name", "email"], primary_key="id"
+        )
+
+        # Directly adding data to the database
+        # TODO: replace once insert is implemented
+        self.storage.db["DATA"]["users"] = [
+            [1, "Alice", "alice@example.com"],
+            [2, "Bob", "bob@example.com"],
+        ]
+        self.storage.db["COLUMNS"]["users"] = ["id", "name", "email"]
+
+        # Manually update the index for primary key
+        self.storage.index["users"]["id"] = OOBTree()
+        self.storage.index["users"]["id"][1] = [0]
+        self.storage.index["users"]["id"][2] = [1]
+
+        # Save the changes to the database and index
+        self.storage.save_db()
+        self.storage.save_index()
+
+        # Create an index on the "email" column
+        self.ddl_manager.create_index("users", "email")
+
+        # Check if the index exists in the storage
+        db = self.storage.load_db()
+        self.assertIn("users", db["TABLES"])
+        self.assertIn("email", self.storage.index["users"])
+
+        # Check that the index is populated correctly
+        index = self.storage.index["users"]["email"]
+        self.assertIn("alice@example.com", index)
+        self.assertIn("bob@example.com", index)
+
+    def test_create_index_on_nonexistent_table(self):
+        """Test creating an index on a table that does not exist"""
+        with self.assertRaises(ValueError):
+            self.ddl_manager.create_index("nonexistent_table", "email")
+
+    def test_create_index_on_nonexistent_column(self):
+        """Test creating an index on a column that does not exist"""
+        self.ddl_manager.create_table("users", ["id", "name"], primary_key="id")
+        with self.assertRaises(ValueError):
+            self.ddl_manager.create_index("users", "email")
+
+    ########################## DROP INDEX ##########################
+    def test_drop_index(self):
+        """Test dropping an existing index"""
+        # Create table and insert data
+        self.ddl_manager.create_table(
+            "users", ["id", "name", "email"], primary_key="id"
+        )
+
+        # Directly adding data to the database
+        # TODO: replace once insert is implemented
+        self.storage.db["DATA"]["users"] = [
+            [1, "Alice", "alice@example.com"],
+            [2, "Bob", "bob@example.com"],
+        ]
+        self.storage.db["COLUMNS"]["users"] = ["id", "name", "email"]
+
+        # Manually update the index for primary key
+        self.storage.index["users"]["id"] = OOBTree()
+        self.storage.index["users"]["id"][1] = [0]
+        self.storage.index["users"]["id"][2] = [1]
+
+        # Save the changes to the database and index
+        self.storage.save_db()
+        self.storage.save_index()
+
+        # Create an index on the "email" column
+        self.ddl_manager.create_index("users", "email")
+        self.assertIn("email", self.storage.index["users"])
+
+        # Drop the index
+        self.ddl_manager.drop_index("users", "email")
+        self.assertNotIn("email", self.storage.index["users"])
+
+    def test_drop_nonexistent_index(self):
+        """Test dropping an index that does not exist"""
+        self.ddl_manager.create_table("users", ["id", "name"], primary_key="id")
+        with self.assertRaises(ValueError):
+            self.ddl_manager.drop_index("users", "email")
+
+    def test_drop_index_on_nonexistent_table(self):
+        """Test dropping an index on a table that does not exist"""
+        with self.assertRaises(ValueError):
+            self.ddl_manager.drop_index("nonexistent_table", "email")
+
+    def test_drop_index_on_nonexistent_column(self):
+        """Test dropping an index on a column that does not exist"""
+        self.ddl_manager.create_table("users", ["id", "name"], primary_key="id")
+        with self.assertRaises(ValueError):
+            self.ddl_manager.drop_index("users", "email")
 
 
 if __name__ == "__main__":
