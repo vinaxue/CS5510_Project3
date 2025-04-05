@@ -9,6 +9,8 @@ class StorageManager:
     # TODO: handle SORT BY (probably will be in optimizer later)
 
     def __init__(self, db_file="./data/database.dat", index_file="./data/index.db"):
+        os.makedirs(os.path.dirname(db_file), exist_ok=True)
+        os.makedirs(os.path.dirname(index_file), exist_ok=True)
         self.db_file = db_file
         self.index_file = index_file
 

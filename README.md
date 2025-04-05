@@ -4,7 +4,7 @@
 
 1. BTrees
 2. pyparsing
-3. flask \*needs approval
+3. fastapi, uvicorn \*needs approval
 
 ### Supported features:
 
@@ -17,6 +17,9 @@
 
 `python -m unittest ./tests/{filename}.py`
 
-### Run API:
+### Start interfact:
 
-Run `python app.py` -> API should start at `http://127.0.0.1:5000`
+1. Run `uvicorn app:app --reload` -> the API should start at `localhost:8000`
+2. `cd interface`
+3. `npm update install`
+4. `npm start` -> the frontend should start at `localhost:3000`

@@ -1,34 +1,38 @@
-from flask import Flask, request, jsonify
+from ddl_manager import DDLManager
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from query_manager import QueryManager
 from storage_manager import StorageManager
-from ddl_manager import DDLManager
-from utils import track_time
+import uvicorn
 
-app = Flask(__name__)
 storage_manager = StorageManager()
 query_manager = QueryManager()
 ddl_manager = DDLManager(storage_manager)
 
+app = FastAPI()
 
-@app.route("/query", methods=["POST"])
-@track_time
-def execute_query():
-    """API endpoint for the interface"""
-    data = request.get_json()
-    query = data.get("query")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    if not query:
-        return jsonify({"error": "No query provided"}), 400
+
+class QueryRequest(BaseModel):
+    query: str
+
+
+@app.post("/query")
+async def execute_query(data: QueryRequest):
+    # TODO: add actual logic to excute parsed query (or somewhere else)
+    # sample query
+    # data.query = "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100))"
 
     try:
-        parsed_query = query_manager.parse_query(query)
-        # TODO: Implement the logic to execute the parsed query (or somewhere else)
-
-        result = ""
-        return jsonify({"success": True, "result": result})
+        query = query_manager.parse_query(data.query)
+        return {"result": query}
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-
-if __name__ == "__main__":
-    app.run(debug=True)
+        raise HTTPException(status_code=400, detail=str(e))
