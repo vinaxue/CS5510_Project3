@@ -182,31 +182,34 @@ class QueryManager:
             | self.drop_table_stmt("drop_table")
         )
 
-    def parse_query(self, query: str):
-        try:
-            result = self.sql_stmt.parseString(query, parseAll=True)
-            return result
-        except Exception as e:
-            raise Exception(f"Query parsing error: {e}") from e
+    def parse_query(self, queries: str):
+
+        statements = [stmt.strip() for stmt in queries.split(";") if stmt.strip()]
+        results = []
+        for stmt in statements:
+            try:
+                parsed_result = self.sql_stmt.parseString(stmt, parseAll=True)
+                results.append(parsed_result)
+            except Exception as e:
+                raise Exception(f"Query parsing error in statement '{stmt}': {e}") from e
+        return results
 
 
 if __name__ == "__main__":
     qm = QueryManager()
 
-    queries = [
-        "CREATE TABLE users (id int PRIMARY KEY, name string, country_id int FOREIGN KEY REFERENCES countries(id))",
-        "DROP TABLE users",
-        "CREATE INDEX idx_user_name ON users(name)",
-        "DROP INDEX idx_user_name",
-        """SELECT id, name FROM users JOIN orders ON users.id = orders.user_id WHERE age >= 18 GROUP BY country ORDER BY name""",
-        """INSERT INTO users (id, name) VALUES (1, 'Alice')"""
-    ]
+    multi_query = """
+    CREATE TABLE users (id int PRIMARY KEY, name string);
+    DROP TABLE users;
+    INSERT INTO users (id, name) VALUES (1, 'Alice');
+    SELECT id, name FROM users;
+    """
 
-    for sql in queries:
-        try:
-            result = qm.parse_query(sql)
-            print("语句解析成功:")
-            print(result)
+    try:
+        parse_results = qm.parse_query(multi_query)
+        for i, res in enumerate(parse_results, start=1):
+            print(f"语句 {i} 解析成功:")
+            print(res.dump())
             print("-" * 50)
-        except Exception as e:
-            print("解析错误:", e)
+    except Exception as e:
+        print("解析错误:", e)
