@@ -1,5 +1,6 @@
 from BTrees.OOBTree import OOBTree
 
+
 class DMLManager:
     """Execute data manipulation queries: INSERT, DELETE, UPDATE, SELECT, and optimized JOIN SELECT"""
 
@@ -19,7 +20,7 @@ class DMLManager:
         and verifying that each value matches the expected column type.
         Supports types: int, string, and double (float).
         Optimized using the primary key index if available.
-        
+
         :param table_name: The name of the table.
         :param row: A list representing a row of data.
         :raises ValueError: If the table does not exist, row length is incorrect,
@@ -44,15 +45,23 @@ class DMLManager:
         for i, (col_name, col_type) in enumerate(table_columns):
             if col_type == "int":
                 if not isinstance(row[i], int):
-                    raise ValueError(f"Column '{col_name}' expects type int, but got {type(row[i]).__name__}.")
+                    raise ValueError(
+                        f"Column '{col_name}' expects type int, but got {type(row[i]).__name__}."
+                    )
             elif col_type == "string":
                 if not isinstance(row[i], str):
-                    raise ValueError(f"Column '{col_name}' expects type string, but got {type(row[i]).__name__}.")
+                    raise ValueError(
+                        f"Column '{col_name}' expects type string, but got {type(row[i]).__name__}."
+                    )
             elif col_type == "double":
                 if not isinstance(row[i], float):
-                    raise ValueError(f"Column '{col_name}' expects type double, but got {type(row[i]).__name__}.")
+                    raise ValueError(
+                        f"Column '{col_name}' expects type double, but got {type(row[i]).__name__}."
+                    )
             else:
-                raise ValueError(f"Unsupported column type '{col_type}' for column '{col_name}'.")
+                raise ValueError(
+                    f"Unsupported column type '{col_type}' for column '{col_name}'."
+                )
 
         # Check for duplicate based on primary key if defined
         table_def = self.db["TABLES"][table_name]
@@ -62,17 +71,23 @@ class DMLManager:
             try:
                 pk_index = col_names.index(primary_key)
             except ValueError:
-                raise ValueError(f"Primary key '{primary_key}' is not defined in the table columns.")
+                raise ValueError(
+                    f"Primary key '{primary_key}' is not defined in the table columns."
+                )
             pk_value = row[pk_index]
             # Use the index if available for quick duplicate check
             if table_name in self.index and primary_key in self.index[table_name]:
                 if pk_value in self.index[table_name][primary_key]:
-                    raise ValueError(f"Duplicate entry for primary key '{primary_key}' with value '{pk_value}'.")
+                    raise ValueError(
+                        f"Duplicate entry for primary key '{primary_key}' with value '{pk_value}'."
+                    )
             else:
                 # Fallback: check in existing table data (less optimized)
                 for existing_row in self.db["DATA"][table_name]:
                     if existing_row[pk_index] == pk_value:
-                        raise ValueError(f"Duplicate entry for primary key '{primary_key}' with value '{pk_value}'.")
+                        raise ValueError(
+                            f"Duplicate entry for primary key '{primary_key}' with value '{pk_value}'."
+                        )
 
         # Append the new row
         self.db["DATA"][table_name].append(row)
@@ -118,7 +133,9 @@ class DMLManager:
                     selected = {}
                     for col in columns:
                         if col not in table_columns:
-                            raise ValueError(f"Column '{col}' does not exist in table '{table_name}'")
+                            raise ValueError(
+                                f"Column '{col}' does not exist in table '{table_name}'"
+                            )
                         selected[col] = row[table_columns.index(col)]
                     result.append(selected)
 
@@ -191,10 +208,16 @@ class DMLManager:
                 new_row = row.copy()
                 for col, new_value in updates.items():
                     if col not in table_columns:
-                        raise ValueError(f"Column '{col}' does not exist in table '{table_name}'")
+                        raise ValueError(
+                            f"Column '{col}' does not exist in table '{table_name}'"
+                        )
                     col_index = table_columns.index(col)
                     # If new_value is a callable, compute the updated value based on the old value
-                    new_row[col_index] = new_value(new_row[col_index]) if callable(new_value) else new_value
+                    new_row[col_index] = (
+                        new_value(new_row[col_index])
+                        if callable(new_value)
+                        else new_value
+                    )
                 data[idx] = new_row
                 update_count += 1
 
@@ -215,11 +238,18 @@ class DMLManager:
 
         return update_count
 
-    def select_join_with_index(self, left_table, right_table, left_join_col, right_join_col, 
-                                 columns=None, where=None):
+    def select_join_with_index(
+        self,
+        left_table,
+        right_table,
+        left_join_col,
+        right_join_col,
+        columns=None,
+        where=None,
+    ):
         """
         Optimized SELECT JOIN based on an equality condition using index or a hash table.
-        
+
         :param left_table: Name of the left table.
         :param right_table: Name of the right table.
         :param left_join_col: Column in the left table used for join.
@@ -248,7 +278,7 @@ class DMLManager:
             right_index_dict = {}
             col_idx_right = right_columns.index(right_join_col)
             for key in right_index:
-                
+
                 right_index_dict[key] = []
                 for row_id in right_index[key]:
                     right_index_dict[key].append((row_id, right_data[row_id]))
@@ -274,13 +304,16 @@ class DMLManager:
                         joined_row[f"{left_table}.{col}"] = left_row[idx]
                     for idx, col in enumerate(right_columns):
                         joined_row[f"{right_table}.{col}"] = right_row[idx]
-                    
+
                     # Apply additional filtering if a where condition is provided.
                     if where is None or where(joined_row):
                         if columns is None:
                             joined_results.append(joined_row)
                         else:
-                            filtered_row = {col: joined_row[col] for col in columns if col in joined_row}
+                            filtered_row = {
+                                col: joined_row[col]
+                                for col in columns
+                                if col in joined_row
+                            }
                             joined_results.append(filtered_row)
         return joined_results
-    # TODO: check for duplicates in INSERT
