@@ -274,6 +274,95 @@ class QueryManager:
         else:
             raise Exception("Unsupported SQL command")
 
+    def execute_query(self, query: str):
+        """
+        Execute the parsed query.
+
+        """
+        parsed_query = self.parse_query(query)
+
+        command = parsed_query[0]
+        print(parsed_query)
+
+        if command == "CREATE":
+            if parsed_query[1] == "TABLE":
+                table_name, raw_columns = parsed_query[2:]
+                columns = []
+                primary_key = None
+                foreign_keys = []
+
+                for col in raw_columns:
+                    col_name, col_type = col[0], col[1]
+                    constraints = col[2] if len(col) > 2 else []
+                    columns.append((col_name, col_type))
+
+                    if "PRIMARY KEY" in " ".join(constraints):
+                        primary_key = col_name
+
+                    if "FOREIGN" in constraints and "KEY" in constraints:
+                        ref_index = constraints.index("REFERENCES")
+                        ref_table = constraints[ref_index + 1]
+                        ref_col = constraints[ref_index + 2]
+                        foreign_keys.append((col_name, ref_table, ref_col))
+
+                self.ddl_manager.create_table(
+                    table_name, columns, primary_key, foreign_keys
+                )
+
+            elif "INDEX" in parsed_query:
+                index_name = parsed_query.index_name
+                table_name = parsed_query.on_table
+                columns = [col for col in parsed_query.columns]
+                self.ddl_manager.create_index(table_name, columns, index_name)
+        elif command == "DROP":
+            if "TABLE" in parsed_query:
+                table_name = parsed_query.table_name
+                self.ddl_manager.drop_table(table_name)
+            elif "INDEX" in parsed_query:
+                index_name = parsed_query.index_name
+                self.ddl_manager.drop_index(index_name)
+        elif command == "INSERT":
+            table_name = parsed_query.table
+            columns = parsed_query.columns.asList() if parsed_query.columns else None
+            values = parsed_query.values.asList()
+            self.dml_manager.insert(table_name, columns, values)
+        elif command == "SELECT":
+            columns = parsed_query[1]
+            from_part = parsed_query[3]
+            table_name = from_part[0]
+            if isinstance(from_part[1], list) and from_part[1][0] == "JOIN":
+                join_table = from_part[1][1]
+                on_clause = from_part[1][2]
+                left_join_col = on_clause[1].split(".")[1]
+                right_join_col = on_clause[3].split(".")[1]
+
+                where_clause = None
+                for clause in parsed_query[4:]:
+                    if clause[0] == "WHERE":
+                        where_clause = clause[1:]
+
+                self.dml_manager.select_with_join(
+                    left_table=table_name,
+                    right_table=join_table,
+                    left_join_col=left_join_col,
+                    right_join_col=right_join_col,
+                    columns=columns,
+                    where=where_clause,
+                )
+            else:
+                where_clause = None
+                for clause in parsed_query[4:]:
+                    if clause[0] == "WHERE":
+                        where_clause = clause[1:]
+
+                self.dml_manager.select_from_table(
+                    table_name=table_name,
+                    columns=columns,
+                    where=where_clause,
+                )
+        else:
+            raise Exception("Unsupported SQL command")
+
 
 if __name__ == "__main__":
     qm = QueryManager()

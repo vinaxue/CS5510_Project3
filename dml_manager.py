@@ -41,8 +41,9 @@ class DMLManager:
         if len(row) != len(table_columns):
             raise ValueError("Row length does not match the number of table columns.")
 
+        table_columns_items = list(self.db["COLUMNS"][table_name].items())
         # Check that each value's type matches the column's expected type
-        for i, (col_name, col_type) in enumerate(table_columns):
+        for i, (col_name, col_type) in enumerate(table_columns_items):
             if col_type == "int":
                 if not isinstance(row[i], int):
                     raise ValueError(
@@ -69,7 +70,9 @@ class DMLManager:
             primary_key = table_def["primary_key"]
             # Find the primary key column index using the extracted column names
             try:
-                pk_index = col_names.index(primary_key)
+                pk_index = list(self.db["COLUMNS"][table_name].keys()).index(
+                    primary_key
+                )
             except ValueError:
                 raise ValueError(
                     f"Primary key '{primary_key}' is not defined in the table columns."
@@ -123,12 +126,13 @@ class DMLManager:
             raise ValueError(f"Table '{table_name}' does not exist")
 
         table_columns = self.db["COLUMNS"][table_name]
+        column_names = list(table_columns.keys())
         result = []
 
         for row in self.db["DATA"][table_name]:
             if where is None or where(row):
                 if columns is None:
-                    result.append(dict(zip(table_columns, row)))
+                    result.append(dict(zip(column_names, row)))
                 else:
                     selected = {}
                     for col in columns:
@@ -136,7 +140,7 @@ class DMLManager:
                             raise ValueError(
                                 f"Column '{col}' does not exist in table '{table_name}'"
                             )
-                        selected[col] = row[table_columns.index(col)]
+                        selected[col] = row[list(table_columns.keys()).index(col)]
                     result.append(selected)
 
         return result
@@ -173,7 +177,7 @@ class DMLManager:
                 self.index[table_name][col] = OOBTree()
             for row_id, row in enumerate(new_data):
                 for col, tree in self.index[table_name].items():
-                    col_index = table_columns.index(col)
+                    col_index = list(table_columns.keys()).index(col)
                     value = row[col_index]
                     if value not in tree:
                         tree[value] = []
@@ -211,7 +215,7 @@ class DMLManager:
                         raise ValueError(
                             f"Column '{col}' does not exist in table '{table_name}'"
                         )
-                    col_index = table_columns.index(col)
+                    col_index = list(table_columns.keys()).index(col)
                     # If new_value is a callable, compute the updated value based on the old value
                     new_row[col_index] = (
                         new_value(new_row[col_index])
@@ -227,7 +231,7 @@ class DMLManager:
                 self.index[table_name][col] = OOBTree()
             for row_id, row in enumerate(data):
                 for col, tree in self.index[table_name].items():
-                    col_index = table_columns.index(col)
+                    col_index = list(table_columns.keys()).index(col)
                     value = row[col_index]
                     if value not in tree:
                         tree[value] = []
@@ -271,12 +275,18 @@ class DMLManager:
         left_data = self.db["DATA"][left_table]
         right_data = self.db["DATA"][right_table]
 
+        left_col_names = list(left_columns.keys())
+        right_col_names = list(right_columns.keys())
+
+        left_col_idx = left_col_names.index(left_join_col)
+        right_col_idx = right_col_names.index(right_join_col)
+
         # Try to utilize right table's index for join if available.
         if right_table in self.index and right_join_col in self.index[right_table]:
             right_index = self.index[right_table][right_join_col]
             # Convert right_index to a dict with key: list of rows (row_id, row)
             right_index_dict = {}
-            col_idx_right = right_columns.index(right_join_col)
+            col_idx_right = list(right_columns).index(right_join_col)
             for key in right_index:
 
                 right_index_dict[key] = []
@@ -285,13 +295,13 @@ class DMLManager:
         else:
             # If no index exists, build a hash table from right table's join column.
             right_index_dict = {}
-            col_idx_right = right_columns.index(right_join_col)
+            col_idx_right = list(right_columns.keys()).index(right_join_col)
             for row_id, row in enumerate(right_data):
                 key = row[col_idx_right]
                 right_index_dict.setdefault(key, []).append((row_id, row))
 
         joined_results = []
-        left_col_idx = left_columns.index(left_join_col)
+        left_col_idx = list(left_columns.keys()).index(left_join_col)
 
         # Iterate over left table rows and find matching right rows via the hash table.
         for left_row in left_data:

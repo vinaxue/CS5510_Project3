@@ -2,7 +2,7 @@
 CREATE TABLE Users (UserID INT PRIMARY KEY, UserName STRING, Email STRING)
 
 -- Create the second table: Orders
-CREATE TABLE Orders (OrderID INT PRIMARY KEY, OrderDate STRING, Amount INT, UserID INT FOREIGN KEY REFERENCES Users(UserID))
+CREATE TABLE Orders (OrderID INT PRIMARY KEY, OrderDate STRING, Amount DOUBLE, UserID INT FOREIGN KEY REFERENCES Users(UserID))
 
 -- Create an index on Users table for UserName
 CREATE INDEX idx_UserName ON Users(UserName)

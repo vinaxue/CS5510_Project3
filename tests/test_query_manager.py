@@ -39,7 +39,7 @@ class TestQueryManager(unittest.TestCase):
         )
 
     def test_execute_create_table_foreign_key_query(self):
-        query = "CREATE TABLE Orders (OrderID INT PRIMARY KEY, OrderDate STRING, Amount INT, UserID INT FOREIGN KEY REFERENCES Users(UserID))"
+        query = "CREATE TABLE Orders (OrderID INT PRIMARY KEY, OrderDate STRING, Amount DOUBLE, UserID INT FOREIGN KEY REFERENCES Users(UserID))"
         self.query_manager.execute_query(query)
 
         db = self.storage.load_db()
@@ -47,7 +47,12 @@ class TestQueryManager(unittest.TestCase):
         self.assertEqual(db["TABLES"]["Orders"]["primary_key"], "OrderID")
         self.assertEqual(
             db["COLUMNS"]["Orders"],
-            {"OrderID": "INT", "OrderDate": "STRING", "Amount": "INT", "UserID": "INT"},
+            {
+                "OrderID": "INT",
+                "OrderDate": "STRING",
+                "Amount": "DOUBLE",
+                "UserID": "INT",
+            },
         )
         self.assertIn("FOREIGN_KEYS", db["Orders"])
         self.assertEqual(

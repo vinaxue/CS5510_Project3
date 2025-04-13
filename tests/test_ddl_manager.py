@@ -23,15 +23,19 @@ class TestDDLManager(unittest.TestCase):
     ########################## CREATE TABLE ##########################
     def test_create_table(self):
         """Test creating a new table and check if primary key index is created"""
-        # Create table with primary key
+        # Create table with primary key and column types
         self.ddl_manager.create_table(
-            "users", ["id", "name", "email"], primary_key="id"
+            "users",
+            [("id", "int"), ("name", "str"), ("email", "str")],
+            primary_key="id",
         )
 
         db = self.storage.load_db()
         self.assertIn("users", db["TABLES"])
         self.assertEqual(db["TABLES"]["users"]["primary_key"], "id")
-        self.assertEqual(db["COLUMNS"]["users"], ["id", "name", "email"])
+        self.assertEqual(
+            db["COLUMNS"]["users"], [("id", "int"), ("name", "str"), ("email", "str")]
+        )
 
         # Check if the index exists for the primary key column
         self.assertIn("users", self.storage.index)
@@ -45,16 +49,22 @@ class TestDDLManager(unittest.TestCase):
 
     def test_create_duplicate_table(self):
         """Test creating a duplicate table raises an error"""
-        self.ddl_manager.create_table("users", ["id", "name"], primary_key="id")
+        self.ddl_manager.create_table(
+            "users", [("id", "int"), ("name", "str")], primary_key="id"
+        )
         with self.assertRaises(ValueError):
-            self.ddl_manager.create_table("users", ["id", "name"], primary_key="id")
+            self.ddl_manager.create_table(
+                "users", [("id", "int"), ("name", "str")], primary_key="id"
+            )
 
     def test_create_table_with_foreign_keys(self):
         """Test creating a table with foreign keys"""
-        self.ddl_manager.create_table("departments", ["id", "name"], primary_key="id")
+        self.ddl_manager.create_table(
+            "departments", [("id", "int"), ("name", "str")], primary_key="id"
+        )
         self.ddl_manager.create_table(
             "employees",
-            ["id", "name", "dept_id"],
+            [("id", "int"), ("name", "str"), ("dept_id", "int")],
             primary_key="id",
             foreign_keys=[("dept_id", "departments", "id")],
         )
@@ -75,7 +85,9 @@ class TestDDLManager(unittest.TestCase):
     ########################## DROP TABLE ##########################
     def test_drop_table(self):
         """Test dropping an existing table"""
-        self.ddl_manager.create_table("users", ["id", "name"], primary_key="id")
+        self.ddl_manager.create_table(
+            "users", [("id", "int"), ("name", "str")], primary_key="id"
+        )
         self.ddl_manager.drop_table("users")
         db = self.storage.load_db()
         self.assertNotIn("users", db["TABLES"])
@@ -90,10 +102,12 @@ class TestDDLManager(unittest.TestCase):
 
     def test_drop_table_with_foreign_key_dependency(self):
         """Test dropping a table that is referenced by a foreign key raises an error"""
-        self.ddl_manager.create_table("departments", ["id", "name"], primary_key="id")
+        self.ddl_manager.create_table(
+            "departments", [("id", "int"), ("name", "str")], primary_key="id"
+        )
         self.ddl_manager.create_table(
             "employees",
-            ["id", "name", "dept_id"],
+            [("id", "int"), ("name", "str"), ("dept_id", "int")],
             primary_key="id",
             foreign_keys=[("dept_id", "departments", "id")],
         )
@@ -105,7 +119,9 @@ class TestDDLManager(unittest.TestCase):
         """Test creating an index on an existing column"""
         # Create table and insert data
         self.ddl_manager.create_table(
-            "users", ["id", "name", "email"], primary_key="id"
+            "users",
+            [("id", "int"), ("name", "str"), ("email", "str")],
+            primary_key="id",
         )
 
         # Directly adding data to the database
@@ -114,7 +130,11 @@ class TestDDLManager(unittest.TestCase):
             [1, "Alice", "alice@example.com"],
             [2, "Bob", "bob@example.com"],
         ]
-        self.storage.db["COLUMNS"]["users"] = ["id", "name", "email"]
+        self.storage.db["COLUMNS"]["users"] = [
+            ("id", "int"),
+            ("name", "str"),
+            ("email", "str"),
+        ]
 
         # Manually update the index for primary key
         self.storage.index["users"]["id"] = OOBTree()
@@ -145,7 +165,9 @@ class TestDDLManager(unittest.TestCase):
 
     def test_create_index_on_nonexistent_column(self):
         """Test creating an index on a column that does not exist"""
-        self.ddl_manager.create_table("users", ["id", "name"], primary_key="id")
+        self.ddl_manager.create_table(
+            "users", [("id", "int"), ("name", "str")], primary_key="id"
+        )
         with self.assertRaises(ValueError):
             self.ddl_manager.create_index("users", "email")
 
@@ -154,7 +176,9 @@ class TestDDLManager(unittest.TestCase):
         """Test dropping an existing index"""
         # Create table and insert data
         self.ddl_manager.create_table(
-            "users", ["id", "name", "email"], primary_key="id"
+            "users",
+            [("id", "int"), ("name", "str"), ("email", "str")],
+            primary_key="id",
         )
 
         # Directly adding data to the database
@@ -163,7 +187,11 @@ class TestDDLManager(unittest.TestCase):
             [1, "Alice", "alice@example.com"],
             [2, "Bob", "bob@example.com"],
         ]
-        self.storage.db["COLUMNS"]["users"] = ["id", "name", "email"]
+        self.storage.db["COLUMNS"]["users"] = [
+            ("id", "int"),
+            ("name", "str"),
+            ("email", "str"),
+        ]
 
         # Manually update the index for primary key
         self.storage.index["users"]["id"] = OOBTree()
@@ -184,7 +212,9 @@ class TestDDLManager(unittest.TestCase):
 
     def test_drop_nonexistent_index(self):
         """Test dropping an index that does not exist"""
-        self.ddl_manager.create_table("users", ["id", "name"], primary_key="id")
+        self.ddl_manager.create_table(
+            "users", [("id", "int"), ("name", "str")], primary_key="id"
+        )
         with self.assertRaises(ValueError):
             self.ddl_manager.drop_index("users", "email")
 
@@ -195,7 +225,9 @@ class TestDDLManager(unittest.TestCase):
 
     def test_drop_index_on_nonexistent_column(self):
         """Test dropping an index on a column that does not exist"""
-        self.ddl_manager.create_table("users", ["id", "name"], primary_key="id")
+        self.ddl_manager.create_table(
+            "users", [("id", "int"), ("name", "str")], primary_key="id"
+        )
         with self.assertRaises(ValueError):
             self.ddl_manager.drop_index("users", "email")
 
