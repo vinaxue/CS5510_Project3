@@ -8,7 +8,14 @@
 
 ### Supported features:
 
+- Data types:
+
+  - integer
+  - string
+  - double
+
 - DDL
+
   1. CREATE TABLE
      - primary key and foreign key support
      - default index on the primary key
@@ -16,6 +23,13 @@
      - allow drop if any columns of the table is referenced through foreign key
   3. CREATE INDEX
   4. DROP INDEX
+
+- DML
+  1. INSERT
+  2. SELECT
+     1. JOIN
+  3. DELETE
+  4. UPDATE
 
 ### Run unit tests:
 
