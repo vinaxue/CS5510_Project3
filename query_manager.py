@@ -17,6 +17,9 @@ from pyparsing import (
     ZeroOrMore,
 )
 
+from ddl_manager import DDLManager
+from dml_manager import DMLManager
+from storage_manager import StorageManager
 
 class QueryManager:
     def __init__(self, ddl_manager, dml_manager):
@@ -128,7 +131,15 @@ class QueryManager:
             + Suppress(")")
         )
 
-        self.drop_index_stmt = self.DROP + self.INDEX + self.identifier("index_name")
+        self.drop_index_stmt = (
+            self.DROP 
+            + self.INDEX 
+            + self.identifier("index_name") 
+            + Optional(
+                CaselessKeyword("ON") + self.table_name("on_table")
+            )
+        )
+
 
         self.int_type = CaselessKeyword("int")
         self.string_type = CaselessKeyword("string")
@@ -365,20 +376,23 @@ class QueryManager:
 
 
 if __name__ == "__main__":
-    qm = QueryManager()
+    
+    stor_mgr = StorageManager()          # 1) 实例化 StorageManager
+    ddl_mgr = DDLManager(stor_mgr)       # 2) 传给 DDLManager
+    dml_mgr = DMLManager(stor_mgr)
+
+    # 将这两个对象传入 QueryManager 的构造函数
+    qm = QueryManager(ddl_mgr, dml_mgr)
 
     multi_query = """
-    CREATE TABLE users (id int PRIMARY KEY, name string);
-    DROP TABLE users;
-    INSERT INTO users (id, name) VALUES (1, 'Alice');
-    SELECT id, name FROM users;
+    DROP INDEX idx_name ON table_name ;
     """
 
     try:
         parse_results = qm.parse_query(multi_query)
         for i, res in enumerate(parse_results, start=1):
             print(f"语句 {i} 解析成功:")
-            print(res.dump())
+            print(res)
             print("-" * 50)
     except Exception as e:
         print("解析错误:", e)
