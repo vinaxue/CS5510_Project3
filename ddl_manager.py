@@ -33,7 +33,8 @@ class DDLManager:
             self.index[table_name][column_name] = OOBTree()
 
         # Populate the index with existing data if any
-        col_index = self.db["COLUMNS"][table_name].index(column_name)
+        column_names = list(self.db["COLUMNS"][table_name].keys())
+        col_index = column_names.index(column_name)
         for row_id, row in enumerate(self.db["DATA"][table_name]):
             value = row[col_index]
             if value not in self.index[table_name][column_name]:
@@ -68,6 +69,7 @@ class DDLManager:
     def create_table(self, table_name, columns, primary_key, foreign_keys=None):
         """
         Creates a new table with specified columns, primary key, and foreign keys.
+        `columns` should be a list of tuples like [('id', 'INT'), ('name', 'STRING'), ('age', 'INT')]
         foreign_keys should be a list of tuples, e.g., [('column_name', 'referenced_table', 'referenced_column')]
         """
         # Ensure we have the latest data
@@ -82,7 +84,9 @@ class DDLManager:
             "primary_key": primary_key,
             "foreign_keys": foreign_keys or [],
         }
-        self.db["COLUMNS"][table_name] = columns
+        self.db["COLUMNS"][table_name] = {
+            col_name: col_type for col_name, col_type in columns
+        }
         self.db["DATA"][table_name] = []
 
         # Initialize index dictionary for the table
