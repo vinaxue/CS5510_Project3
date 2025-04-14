@@ -140,10 +140,11 @@ class QueryManager:
             )
         )
 
-
+        self.double_type = CaselessKeyword("double")
         self.int_type = CaselessKeyword("int")
         self.string_type = CaselessKeyword("string")
-        self.column_type = self.int_type | self.string_type
+        self.column_type = self.int_type | self.string_type | self.double_type
+
 
         self.primary_key_clause = Group(self.PRIMARY + self.KEY)
         self.foreign_key_clause = Group(
@@ -385,7 +386,7 @@ if __name__ == "__main__":
     qm = QueryManager(ddl_mgr, dml_mgr)
 
     multi_query = """
-    DROP INDEX idx_name ON table_name ;
+    CREATE TABLE Orders (OrderID INT PRIMARY KEY, OrderDate STRING, Amount DOUBLE, UserID INT FOREIGN KEY REFERENCES Users(UserID)) ;
     """
 
     try:
