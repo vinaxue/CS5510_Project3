@@ -221,10 +221,11 @@ class QueryManager:
                         if "PRIMARY KEY" in " ".join(constraints):
                             primary_key = col_name
 
-                        if "FOREIGN" in constraints and "KEY" in constraints:
-                            ref_index = constraints.index("REFERENCES")
-                            ref_table = constraints[ref_index + 1]
-                            ref_col = constraints[ref_index + 2]
+                        if any(
+                            "FOREIGN" in constraint for constraint in constraints
+                        ) and any("KEY" in constraint for constraint in constraints):
+                            ref_table = constraints[3]
+                            ref_col = constraints[4]
                             foreign_keys.append((col_name, ref_table, ref_col))
 
                     self.ddl_manager.create_table(
