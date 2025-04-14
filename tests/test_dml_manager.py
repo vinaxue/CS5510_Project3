@@ -72,8 +72,9 @@ class TestDMLManager(unittest.TestCase):
 
     def test_insert_updates_index(self):
         """Test that insert operation updates the index"""
-        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
-        self.assertIn(1, self.storage.index["users"]["id"])
+        self.dml_manager.insert("users", [1, "Bob", "bob@example.com"])
+        index = self.storage.load_index()
+        self.assertIn(1, index["users"]["id"]["tree"])
 
     ########################## SELECT TESTS ##########################
     def test_select_all_columns(self):

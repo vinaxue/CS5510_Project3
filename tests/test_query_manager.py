@@ -23,6 +23,57 @@ class TestQueryManager(unittest.TestCase):
         if os.path.exists(self.index_file):
             os.remove(self.index_file)
 
+    ########################## Helper Functions ##########################
+    def setup_table_users(self):
+        """Ensure the Users table exists"""
+        db = self.storage.load_db()
+        if "Users" not in db["TABLES"]:
+            self.ddl_manager.create_table(
+                "Users",
+                [("UserID", "INT"), ("UserName", "STRING"), ("Email", "STRING")],
+                primary_key="UserID",
+            )
+
+    def setup_table_orders(self):
+        """Ensure the Orders table exists"""
+        self.setup_table_users()
+        db = self.storage.load_db()
+        if "Orders" not in db["TABLES"]:
+            self.ddl_manager.create_table(
+                "Orders",
+                [
+                    ("OrderID", "INT"),
+                    ("OrderDate", "STRING"),
+                    ("Amount", "DOUBLE"),
+                    ("UserID", "INT"),
+                ],
+                primary_key="OrderID",
+                foreign_keys=[("UserID", "Users", "UserID")],
+            )
+
+    def insert_user(self, user_id, user_name, email):
+        """Insert a user into the Users table"""
+        self.setup_table_users()
+        db = self.storage.load_db()
+        if [user_id, user_name, email] not in db.get("DATA", {}).get("Users", []):
+            self.dml_manager.insert("Users", [user_id, user_name, email])
+
+    def insert_order(self, order_id, order_date, amount, user_id):
+        """Insert an order into the Orders table"""
+        self.setup_table_orders()
+        db = self.storage.load_db()
+        if [order_id, order_date, amount, user_id] not in db.get("DATA", {}).get(
+            "Orders", []
+        ):
+            self.dml_manager.insert("Orders", [order_id, order_date, amount, user_id])
+
+    def create_index_on_users(self, column_name):
+        """Create an index on the Users table"""
+        self.setup_table_users()
+        index = self.storage.load_index()
+        if f"idx_{column_name}" not in index.get("Users", {}):
+            self.ddl_manager.create_index("Users", column_name)
+
     ########################## CREATE TABLE ##########################
     def test_execute_create_table_query(self):
         query = (
@@ -39,6 +90,10 @@ class TestQueryManager(unittest.TestCase):
         )
 
     def test_execute_create_table_foreign_key_query(self):
+        self.setup_table_users()
+
+        db = self.storage.load_db()
+
         query = "CREATE TABLE Orders (OrderID INT PRIMARY KEY, OrderDate STRING, Amount DOUBLE, UserID INT FOREIGN KEY REFERENCES Users(UserID))"
         self.query_manager.execute_query(query)
 
@@ -62,8 +117,10 @@ class TestQueryManager(unittest.TestCase):
 
     ############################ INSERT ##########################
     def test_execute_insert_query(self):
+        self.setup_table_users()
+
         db = self.storage.load_db()
-        self.assertIn("Users", db["TABLES"])
+        index = self.storage.load_index()
 
         query = "INSERT INTO Users (UserID, UserName, Email) VALUES (1, 'Alice', 'alice@example.com')"
         self.query_manager.execute_query(query)
@@ -82,9 +139,10 @@ class TestQueryManager(unittest.TestCase):
         self.assertEqual(index["Users"]["UserID"][1], [0])
 
     def test_execute_multiple_insert_query(self):
+        self.insert_user(1, "Alice", "alice@example.com")
+
         db = self.storage.load_db()
-        self.assertIn("Users", db["TABLES"])
-        len_before = len(db["DATA"].get("Users", []))
+        index = self.storage.load_index()
 
         query = """INSERT INTO Users (UserID, UserName, Email) VALUES (2, 'Bob', 'bob@example.com'); 
         INSERT INTO Users (UserID, UserName, Email) VALUES (3, 'Charlie', 'charlie@example.com');"""
@@ -94,24 +152,25 @@ class TestQueryManager(unittest.TestCase):
         index = self.storage.load_index()
 
         self.assertIn("Users", db["DATA"])
-        self.assertEqual(len(db["DATA"]["Users"]), len_before + 2)
-        self.assertEqual(db["DATA"]["Users"][len_before], [2, "Bob", "bob@example.com"])
-        self.assertEqual(
-            db["DATA"]["Users"][len_before + 1], [3, "Charlie", "charlie@example.com"]
-        )
+        self.assertEqual(len(db["DATA"]["Users"]), 2)
+        self.assertEqual(db["DATA"]["Users"][1], [2, "Bob", "bob@example.com"])
+        self.assertEqual(db["DATA"]["Users"][2], [3, "Charlie", "charlie@example.com"])
 
         self.assertIn("Users", index)
         self.assertIn("UserID", index["Users"])
         self.assertIn(2, index["Users"]["UserID"])
         self.assertIn(3, index["Users"]["UserID"])
 
-        self.assertEqual(index["Users"]["UserID"][2], [len_before])
-        self.assertEqual(index["Users"]["UserID"][3], [len_before + 1])
+        self.assertEqual(index["Users"]["UserID"][2], [1])
+        self.assertEqual(index["Users"]["UserID"][3], [2])
 
     def test_execute_insert_with_foreign_key_query(self):
+        self.setup_table_users()
+        self.setup_table_orders()
+        self.insert_user(1, "Alice", "alice@example.com")
+
         db = self.storage.load_db()
-        self.assertIn("Users", db["TABLES"])
-        self.assertIn("Orders", db["TABLES"])
+        index = self.storage.load_index()
 
         query = "INSERT INTO Orders (OrderID, OrderDate, Amount, UserID) VALUES (1, '2023-10-01', 100.0, 1)"
         self.query_manager.execute_query(query)
@@ -134,6 +193,11 @@ class TestQueryManager(unittest.TestCase):
 
     ############################# CREATE INDEX ##########################
     def test_execute_create_index_query(self):
+        self.setup_table_users()
+
+        db = self.storage.load_db()
+        index = self.storage.load_index()
+
         query = "CREATE INDEX idx_UserName ON Users(UserName)"
         self.query_manager.execute_query(query)
 
@@ -144,18 +208,32 @@ class TestQueryManager(unittest.TestCase):
 
     ############################## SELECT ##########################
     def test_execute_select_query(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+
         query = "SELECT UserName FROM Users WHERE UserID = 1"
         result = self.query_manager.execute_query(query)
 
         self.assertEqual(result, [["Alice"]])
 
     def test_execute_select_query_with_condition(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+
         query = "SELECT UserName FROM Users WHERE UserID > 1"
         result = self.query_manager.execute_query(query)
 
-        self.assertEqual(result, [["Bob"], ["Charlie"]])
+        self.assertEqual(result, [["Bob"]])
 
     def test_execute_select_query_with_join(self):
+        self.setup_table_users()
+        self.setup_table_orders()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 2)
+
         query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID"
         result = self.query_manager.execute_query(query)
 
@@ -163,6 +241,12 @@ class TestQueryManager(unittest.TestCase):
 
     ############################### UPDATE ##########################
     def test_execute_update_query(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+
+        db = self.storage.load_db()
+        index = self.storage.load_index()
+
         query = "UPDATE Users SET UserName = 'Alice Smith' WHERE UserID = 1"
         self.query_manager.execute_query(query)
 
@@ -176,6 +260,12 @@ class TestQueryManager(unittest.TestCase):
 
     ############################## DELETE ##########################
     def test_execute_delete_query(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice Smith", "alice@example.com")
+
+        db = self.storage.load_db()
+        index = self.storage.load_index()
+
         query = "DELETE FROM Users WHERE UserID = 1"
         self.query_manager.execute_query(query)
 
@@ -188,9 +278,11 @@ class TestQueryManager(unittest.TestCase):
 
     ############################## DROP INDEX ##########################
     def test_execute_drop_index_query(self):
-        query = "CREATE INDEX idx_UserName ON Users(UserName)"
-        self.query_manager.execute_query(query)
+        self.setup_table_users()
+        self.create_index_on_users("UserName")
 
+        index = self.storage.load_index()
+        db = self.storage.load_db()
         query = "DROP INDEX idx_UserName ON Users"
         self.query_manager.execute_query(query)
 
@@ -200,12 +292,32 @@ class TestQueryManager(unittest.TestCase):
 
     ############################# DROP TABLE ##########################
     def test_execute_drop_table_query(self):
+        db = self.storage.load_db()
+
+        if "Orders" not in db["TABLES"]:
+            self.ddl_manager.create_table(
+                "Orders",
+                [
+                    ("OrderID", "INT"),
+                    ("OrderDate", "STRING"),
+                    ("Amount", "DOUBLE"),
+                    ("UserID", "INT"),
+                ],
+                primary_key="OrderID",
+                foreign_keys=[("UserID", "Users", "UserID")],
+            )
+
+        db = self.storage.load_db()
+        index = self.storage.load_index()
+
         query = "DROP TABLE Orders"
         self.query_manager.execute_query(query)
 
         db = self.storage.load_db()
+        index = self.storage.load_index()
 
         self.assertNotIn("Orders", db["TABLES"])
         self.assertNotIn("Orders", db["COLUMNS"])
         self.assertNotIn("Orders", db["DATA"])
         self.assertNotIn("Orders", db["FOREIGN_KEYS"])
+        self.assertNotIn("Orders", index)

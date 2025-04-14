@@ -10,7 +10,7 @@
 
 - Data types:
 
-  - integer
+  - int
   - string
   - double
 

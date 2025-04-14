@@ -14,7 +14,7 @@ class DDLManager:
         self.storage_manager.load_db()
         self.storage_manager.load_index()
 
-    def create_index(self, table_name, column_name):
+    def create_index(self, table_name, column_name, index_name=None):
         """Creates an index on a specified column of a table"""
         self.reload()
 
@@ -30,39 +30,42 @@ class DDLManager:
             self.index[table_name] = {}
 
         if column_name not in self.index[table_name]:
-            self.index[table_name][column_name] = OOBTree()
+            self.index[table_name][column_name] = {
+                "tree": OOBTree(),
+                "name": index_name or f"{table_name}_{column_name}_idx",
+            }
 
         # Populate the index with existing data if any
         column_names = list(self.db["COLUMNS"][table_name].keys())
         col_index = column_names.index(column_name)
         for row_id, row in enumerate(self.db["DATA"][table_name]):
             value = row[col_index]
-            if value not in self.index[table_name][column_name]:
-                self.index[table_name][column_name][value] = []
-            self.index[table_name][column_name][value].append(row_id)
+            if value not in self.index[table_name][column_name]["tree"]:
+                self.index[table_name][column_name]["tree"][value] = []
+            self.index[table_name][column_name]["tree"][value].append(row_id)
 
         # Save index
         self.storage_manager.save_index()
 
-    def drop_index(self, table_name, column_name):
-        """Drops an index on a specified column of a table"""
+    def drop_index(self, index_name):
+        """Drops an index by its name"""
         self.reload()
 
-        # Validate table and column
-        if table_name not in self.db["TABLES"]:
-            raise ValueError(f"Table '{table_name}' does not exist")
-        if column_name not in self.db["COLUMNS"][table_name]:
-            raise ValueError(
-                f"Column '{column_name}' does not exist in table '{table_name}'"
-            )
+        found = False
 
-        # Check if the column has an index
-        if table_name in self.index and column_name in self.index[table_name]:
-            self.index[table_name].pop(column_name)
-        else:
-            raise ValueError(
-                f"No index found on column '{column_name}' in table '{table_name}'"
-            )
+        for table_name in list(self.index.keys()):
+            for column_name in list(self.index[table_name].keys()):
+                index_info = self.index[table_name][column_name]
+                if index_info["name"] == index_name:
+                    # Drop the index
+                    del self.index[table_name][column_name]
+                    found = True
+                    break
+            if found:
+                break
+
+        if not found:
+            raise ValueError(f"No index found with the name '{index_name}'")
 
         self.storage_manager.save_index()
 

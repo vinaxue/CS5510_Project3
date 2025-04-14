@@ -35,7 +35,7 @@ class DMLManager:
         # Retrieve table columns (expected as list of tuples: (column_name, column_type))
         table_columns = self.db["COLUMNS"][table_name]
         # Extract column names for easier lookup later
-        col_names = [col[0] for col in table_columns]
+        col_names = list(table_columns.keys())
 
         # Validate row length against table columns
         if len(row) != len(table_columns):
@@ -80,7 +80,7 @@ class DMLManager:
             pk_value = row[pk_index]
             # Use the index if available for quick duplicate check
             if table_name in self.index and primary_key in self.index[table_name]:
-                if pk_value in self.index[table_name][primary_key]:
+                if pk_value in self.index[table_name][primary_key]["tree"]:
                     raise ValueError(
                         f"Duplicate entry for primary key '{primary_key}' with value '{pk_value}'."
                     )
@@ -98,11 +98,12 @@ class DMLManager:
 
         # Update indexes if they exist
         if table_name in self.index:
-            for col_name, tree in self.index[table_name].items():
+            for col_name, index in self.index[table_name].items():
                 try:
                     col_index = col_names.index(col_name)
                 except ValueError:
                     continue  # Skip if column not found
+                tree = index["tree"]
                 value = row[col_index]
                 if value not in tree:
                     tree[value] = []
