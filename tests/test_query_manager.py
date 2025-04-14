@@ -216,7 +216,7 @@ class TestQueryManager(unittest.TestCase):
         query = "SELECT UserName FROM Users WHERE UserID = 1"
         result = self.query_manager.execute_query(query)
 
-        self.assertEqual(result, [["Alice"]])
+        self.assertEqual(result, [{"UserName": "Alice"}])
 
     def test_execute_select_query_with_condition(self):
         self.setup_table_users()
@@ -226,7 +226,7 @@ class TestQueryManager(unittest.TestCase):
         query = "SELECT UserName FROM Users WHERE UserID > 1"
         result = self.query_manager.execute_query(query)
 
-        self.assertEqual(result, [["Bob"]])
+        self.assertEqual(result, [{"UserName": "Bob"}])
 
     def test_execute_select_query_with_join(self):
         self.setup_table_users()
@@ -239,7 +239,29 @@ class TestQueryManager(unittest.TestCase):
         query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID"
         result = self.query_manager.execute_query(query)
 
-        self.assertEqual(result, [["Alice", 1]])
+        self.assertEqual(
+            result,
+            [
+                {"Users.UserName": "Alice", "Orders.OrderID": 1},
+                {"Orders.OrderID": 2, "Users.UserName": "Bob"},
+            ],
+        )
+
+    def test_execute_select_query_with_join_with_conditions(self):
+        self.setup_table_users()
+        self.setup_table_orders()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 2)
+
+        query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID WHERE Users.UserID < 2"
+        result = self.query_manager.execute_query(query)
+
+        self.assertEqual(
+            result,
+            [{"Users.UserName": "Alice", "Orders.OrderID": 1}],
+        )
 
     ############################### UPDATE ##########################
     def test_execute_update_query(self):

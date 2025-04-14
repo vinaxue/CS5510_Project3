@@ -298,6 +298,8 @@ class QueryManager:
                     column_names = list(table_columns.keys())
                     where_column_index = column_names.index(column_name)
 
+                    print(column_names, column_name, where_column_index)
+
                     if where_operator == "=":
                         where_function = (
                             lambda row: row[where_column_index] == where_value
@@ -324,7 +326,7 @@ class QueryManager:
                         left_column = join_conditions[2][1].split(".")[-1]
                         right_column = join_conditions[2][3].split(".")[-1]
 
-                    self.dml_manager.select_join_with_index(
+                    results = self.dml_manager.select_join_with_index(
                         left_table=table_name,
                         right_table=right_table,
                         left_join_col=left_column,
@@ -333,12 +335,12 @@ class QueryManager:
                         where=where_function,
                     )
                 else:
-                    self.dml_manager.select(
+                    results = self.dml_manager.select(
                         table_name=table_name,
                         columns=selected_columns,
                         where=where_function,
                     )
-
+                return results
             else:
                 raise Exception("Unsupported SQL command")
 

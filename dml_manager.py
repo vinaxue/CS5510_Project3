@@ -269,6 +269,8 @@ class DMLManager:
         """
         self.reload()
 
+        print(left_table, right_table, left_join_col, right_join_col, columns, where)
+
         # Validate tables existence
         if left_table not in self.db["TABLES"] or right_table not in self.db["TABLES"]:
             raise ValueError("One or both tables do not exist.")
@@ -317,6 +319,8 @@ class DMLManager:
                         joined_row[f"{left_table}.{col}"] = left_row[idx]
                     for idx, col in enumerate(right_columns):
                         joined_row[f"{right_table}.{col}"] = right_row[idx]
+
+                    print(joined_row)
 
                     # Apply additional filtering if a where condition is provided.
                     if where is None or where(joined_row):
