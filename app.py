@@ -10,7 +10,7 @@ import uvicorn
 storage_manager = StorageManager()
 ddl_manager = DDLManager(storage_manager)
 dml_manager = DMLManager(storage_manager)
-query_manager = QueryManager(ddl_manager, dml_manager)
+query_manager = QueryManager(storage_manager, ddl_manager, dml_manager)
 
 app = FastAPI()
 

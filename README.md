@@ -27,7 +27,11 @@
 - DML
   1. INSERT
   2. SELECT
-     1. JOIN
+     1. JOIN (only two tables)
+     2. Conditions (only 1 for now)
+        - '='
+        - '>'
+        - '<'
   3. DELETE
   4. UPDATE
 

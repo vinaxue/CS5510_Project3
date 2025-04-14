@@ -15,7 +15,9 @@ class TestQueryManager(unittest.TestCase):
         self.storage = StorageManager(self.db_file, self.index_file)
         self.ddl_manager = DDLManager(self.storage)
         self.dml_manager = DMLManager(self.storage)
-        self.query_manager = QueryManager(self.ddl_manager, self.dml_manager)
+        self.query_manager = QueryManager(
+            self.storage, self.ddl_manager, self.dml_manager
+        )
 
     def tearDown(self):
         """Clean up test files"""
@@ -72,7 +74,7 @@ class TestQueryManager(unittest.TestCase):
         """Create an index on the Users table"""
         self.setup_table_users()
         index = self.storage.load_index()
-        if f"idx_{column_name}" not in index.get("Users", {}):
+        if f"Users_idx_{column_name}" not in index.get("Users", {}):
             self.ddl_manager.create_index("Users", column_name)
 
     ########################## CREATE TABLE ##########################
@@ -110,7 +112,7 @@ class TestQueryManager(unittest.TestCase):
                 "UserID": INT,
             },
         )
-        self.assertIn("FOREIGN_KEYS", db["Orders"])
+        self.assertIn("Orders", db["FOREIGN_KEYS"])
         self.assertEqual(
             db["FOREIGN_KEYS"]["Orders"],
             {"UserID": {"referenced_table": "Users", "referenced_column": "UserID"}},
@@ -135,9 +137,8 @@ class TestQueryManager(unittest.TestCase):
 
         self.assertIn("Users", index)
         self.assertIn("UserID", index["Users"])
-        self.assertIn(1, index["Users"]["UserID"])
-
-        self.assertEqual(index["Users"]["UserID"][1], [0])
+        self.assertIn(1, index["Users"]["UserID"]["tree"])
+        self.assertEqual(index["Users"]["UserID"]["tree"][1], [0])
 
     def test_execute_multiple_insert_query(self):
         self.insert_user(1, "Alice", "alice@example.com")
@@ -204,8 +205,8 @@ class TestQueryManager(unittest.TestCase):
 
         index = self.storage.load_index()
 
-        self.assertIn("idx_UserName", index["Users"])
-        self.assertIn("UserName", index["Users"]["idx_UserName"])
+        self.assertIn("UserName", index["Users"])
+        self.assertIn("idx_UserName", index["Users"]["UserName"]["name"])
 
     ############################## SELECT ##########################
     def test_execute_select_query(self):
@@ -284,12 +285,13 @@ class TestQueryManager(unittest.TestCase):
 
         index = self.storage.load_index()
         db = self.storage.load_db()
-        query = "DROP INDEX idx_UserName ON Users"
+
+        query = "DROP INDEX Users_UserName_idx ON Users"
         self.query_manager.execute_query(query)
 
         index = self.storage.load_index()
 
-        self.assertNotIn("idx_UserName", index["Users"])
+        self.assertNotIn("Users_UserName_idx", index["Users"])
 
     ############################# DROP TABLE ##########################
     def test_execute_drop_table_query(self):

@@ -23,7 +23,8 @@ from storage_manager import StorageManager
 
 
 class QueryManager:
-    def __init__(self, ddl_manager, dml_manager):
+    def __init__(self, storage_manager, ddl_manager, dml_manager):
+        self.storage_manager = storage_manager
         self.ddl_manager = ddl_manager
         self.dml_manager = dml_manager
 
@@ -200,95 +201,6 @@ class QueryManager:
         Execute the parsed query.
 
         """
-        parsed_query = self.parse_query(query)
-
-        command = parsed_query[0]
-        print(parsed_query)
-
-        if command == "CREATE":
-            if parsed_query[1] == "TABLE":
-                table_name, raw_columns = parsed_query[2:]
-                columns = []
-                primary_key = None
-                foreign_keys = []
-
-                for col in raw_columns:
-                    col_name, col_type = col[0], col[1]
-                    constraints = col[2] if len(col) > 2 else []
-                    columns.append((col_name, col_type))
-
-                    if "PRIMARY KEY" in " ".join(constraints):
-                        primary_key = col_name
-
-                    if "FOREIGN" in constraints and "KEY" in constraints:
-                        ref_index = constraints.index("REFERENCES")
-                        ref_table = constraints[ref_index + 1]
-                        ref_col = constraints[ref_index + 2]
-                        foreign_keys.append((col_name, ref_table, ref_col))
-
-                self.ddl_manager.create_table(
-                    table_name, columns, primary_key, foreign_keys
-                )
-
-            elif "INDEX" in parsed_query:
-                index_name = parsed_query.index_name
-                table_name = parsed_query.on_table
-                columns = [col for col in parsed_query.columns]
-                self.ddl_manager.create_index(table_name, columns, index_name)
-        elif command == "DROP":
-            if "TABLE" in parsed_query:
-                table_name = parsed_query.table_name
-                self.ddl_manager.drop_table(table_name)
-            elif "INDEX" in parsed_query:
-                index_name = parsed_query.index_name
-                self.ddl_manager.drop_index(index_name)
-        elif command == "INSERT":
-            table_name = parsed_query.table
-            columns = parsed_query.columns.asList() if parsed_query.columns else None
-            values = parsed_query.values.asList()
-            self.dml_manager.insert(table_name, columns, values)
-        elif command == "SELECT":
-            columns = parsed_query[1]
-            from_part = parsed_query[3]
-            table_name = from_part[0]
-            if isinstance(from_part[1], list) and from_part[1][0] == "JOIN":
-                join_table = from_part[1][1]
-                on_clause = from_part[1][2]
-                left_join_col = on_clause[1].split(".")[1]
-                right_join_col = on_clause[3].split(".")[1]
-
-                where_clause = None
-                for clause in parsed_query[4:]:
-                    if clause[0] == "WHERE":
-                        where_clause = clause[1:]
-
-                self.dml_manager.select_with_join(
-                    left_table=table_name,
-                    right_table=join_table,
-                    left_join_col=left_join_col,
-                    right_join_col=right_join_col,
-                    columns=columns,
-                    where=where_clause,
-                )
-            else:
-                where_clause = None
-                for clause in parsed_query[4:]:
-                    if clause[0] == "WHERE":
-                        where_clause = clause[1:]
-
-                self.dml_manager.select_from_table(
-                    table_name=table_name,
-                    columns=columns,
-                    where=where_clause,
-                )
-        else:
-            raise Exception("Unsupported SQL command")
-
-    def execute_query(self, query: str):
-        """
-        Execute the parsed query.
-
-        """
         parsed_queries = self.parse_query(query)
 
         for parsed_query in parsed_queries:
@@ -296,7 +208,6 @@ class QueryManager:
             command = parsed_query[0]
             if command == "CREATE":
                 if parsed_query[1] == "TABLE":
-                    # Handle CREATE TABLE
                     table_name, raw_columns = parsed_query[2:4]
                     columns = []
                     primary_key = None
@@ -321,21 +232,18 @@ class QueryManager:
                     )
 
                 elif parsed_query[1] == "INDEX":
-                    # Handle CREATE INDEX
-                    index_name = parsed_query[2]  # The index name
-                    table_name = parsed_query[4]  # The table name
-                    columns = parsed_query[5]  # The list of columns
+                    index_name = parsed_query[2]
+                    table_name = parsed_query[4]
+                    column = parsed_query[5]
 
-                    self.ddl_manager.create_index(table_name, columns, index_name)
+                    self.ddl_manager.create_index(table_name, column[0], index_name)
 
             elif command == "DROP":
-                if "TABLE" in parsed_query:
-                    # Handle DROP TABLE
-                    table_name = parsed_query[2]  # The table name
+                if parsed_query[1] == "TABLE":
+                    table_name = parsed_query[2]
                     self.ddl_manager.drop_table(table_name)
-                elif "INDEX" in parsed_query:
-                    # Handle DROP INDEX
-                    index_name = parsed_query[2]  # The index name
+                elif parsed_query[1] == "INDEX":
+                    index_name = parsed_query[2]
                     self.ddl_manager.drop_index(index_name)
 
             elif command == "INSERT":
@@ -356,39 +264,78 @@ class QueryManager:
                 self.dml_manager.insert(table_name, values)
 
             elif command == "SELECT":
-                columns = parsed_query[1]  # Columns to select
-                from_part = parsed_query[3]  # The FROM part
-                table_name = from_part[0]  # The table name
+                selected_columns = parsed_query[1]
+                from_clause = parsed_query[3]
 
-                if isinstance(from_part[1], list) and from_part[1][0] == "JOIN":
-                    join_table = from_part[1][1]  # The table to join
-                    on_clause = from_part[1][2]  # The ON clause
-                    left_join_col = on_clause[1].split(".")[1]  # The left join column
-                    right_join_col = on_clause[3].split(".")[1]  # The right join column
+                table_name = from_clause[0]
+                where_function = None
 
-                    where_clause = None
-                    for clause in parsed_query[4:]:
-                        if clause[0] == "WHERE":
-                            where_clause = clause[1:]
+                # Process WHERE conditions, if any
+                where_condition = parsed_query[4] if len(parsed_query) > 4 else None
+                if where_condition:
+                    where_column = where_condition[1]
+                    where_operator = where_condition[2]
+                    where_value = (
+                        int(where_condition[3])
+                        if where_condition[3].isdigit()
+                        else (
+                            float(where_condition[3])
+                            if where_condition[3].replace(".", "", 1).isdigit()
+                            else where_condition[3]
+                        )
+                    )
 
-                    self.dml_manager.select_with_join(
+                    if "." in where_column:
+                        table, column_name = where_column.split(".")
+                    else:
+                        table = table_name
+                        column_name = where_column
+
+                    # Get column index in that table
+                    db = self.storage_manager.db
+                    table_columns = db["COLUMNS"][table]
+                    column_names = list(table_columns.keys())
+                    where_column_index = column_names.index(column_name)
+
+                    if where_operator == "=":
+                        where_function = (
+                            lambda row: row[where_column_index] == where_value
+                        )
+                    elif where_operator == ">":
+                        where_function = (
+                            lambda row: row[where_column_index] > where_value
+                        )
+                    elif where_operator == "<":
+                        where_function = (
+                            lambda row: row[where_column_index] < where_value
+                        )
+                    else:
+                        raise Exception(
+                            f"Unsupported condition operator: {where_operator}"
+                        )
+
+                # Process JOINs, if any
+                if len(from_clause) > 1:
+                    join_conditions = from_clause[1]
+
+                    if join_conditions[0] == "JOIN":
+                        right_table = join_conditions[1]
+                        left_column = join_conditions[2][1].split(".")[-1]
+                        right_column = join_conditions[2][3].split(".")[-1]
+
+                    self.dml_manager.select_join_with_index(
                         left_table=table_name,
-                        right_table=join_table,
-                        left_join_col=left_join_col,
-                        right_join_col=right_join_col,
-                        columns=columns,
-                        where=where_clause,
+                        right_table=right_table,
+                        left_join_col=left_column,
+                        right_join_col=right_column,
+                        columns=selected_columns,
+                        where=where_function,
                     )
                 else:
-                    where_clause = None
-                    for clause in parsed_query[4:]:
-                        if clause[0] == "WHERE":
-                            where_clause = clause[1:]
-
-                    self.dml_manager.select_from_table(
+                    self.dml_manager.select(
                         table_name=table_name,
-                        columns=columns,
-                        where=where_clause,
+                        columns=selected_columns,
+                        where=where_function,
                     )
 
             else:
@@ -402,7 +349,7 @@ if __name__ == "__main__":
     dml_mgr = DMLManager(stor_mgr)
 
     # 将这两个对象传入 QueryManager 的构造函数
-    qm = QueryManager(ddl_mgr, dml_mgr)
+    qm = QueryManager(stor_mgr, ddl_mgr, dml_mgr)
 
     multi_query = """
     CREATE TABLE Orders (OrderID INT PRIMARY KEY, OrderDate STRING, Amount DOUBLE, UserID INT FOREIGN KEY REFERENCES Users(UserID)) ;
