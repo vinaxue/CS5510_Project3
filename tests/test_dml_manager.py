@@ -3,6 +3,7 @@ import unittest
 from storage_manager import StorageManager
 from ddl_manager import DDLManager
 from dml_manager import DMLManager
+from utils import DOUBLE, INT, STRING
 
 
 class TestDMLManager(unittest.TestCase):
@@ -17,17 +18,17 @@ class TestDMLManager(unittest.TestCase):
         # Create test tables
         self.ddl_manager.create_table(
             "users",
-            [("id", "int"), ("name", "string"), ("email", "string")],
+            [("id", INT), ("name", STRING), ("email", STRING)],
             primary_key="id",
         )
         self.ddl_manager.create_table(
             "orders",
-            [("order_id", "int"), ("user_id", "int"), ("amount", "double")],
+            [("order_id", INT), ("user_id", INT), ("amount", DOUBLE)],
             primary_key="order_id",
         )
         self.ddl_manager.create_table(
             "products",
-            [("product_id", "int"), ("name", "string"), ("price", "int")],
+            [("product_id", INT), ("name", STRING), ("price", INT)],
             primary_key="product_id",
         )
 

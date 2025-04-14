@@ -4,6 +4,7 @@ from storage_manager import StorageManager
 from ddl_manager import DDLManager
 from dml_manager import DMLManager
 from query_manager import QueryManager
+from utils import DOUBLE, INT, STRING
 
 
 class TestQueryManager(unittest.TestCase):
@@ -30,7 +31,7 @@ class TestQueryManager(unittest.TestCase):
         if "Users" not in db["TABLES"]:
             self.ddl_manager.create_table(
                 "Users",
-                [("UserID", "INT"), ("UserName", "STRING"), ("Email", "STRING")],
+                [("UserID", INT), ("UserName", STRING), ("Email", STRING)],
                 primary_key="UserID",
             )
 
@@ -42,10 +43,10 @@ class TestQueryManager(unittest.TestCase):
             self.ddl_manager.create_table(
                 "Orders",
                 [
-                    ("OrderID", "INT"),
-                    ("OrderDate", "STRING"),
-                    ("Amount", "DOUBLE"),
-                    ("UserID", "INT"),
+                    ("OrderID", INT),
+                    ("OrderDate", STRING),
+                    ("Amount", DOUBLE),
+                    ("UserID", INT),
                 ],
                 primary_key="OrderID",
                 foreign_keys=[("UserID", "Users", "UserID")],
@@ -86,7 +87,7 @@ class TestQueryManager(unittest.TestCase):
         self.assertEqual(db["TABLES"]["Users"]["primary_key"], "UserID")
         self.assertEqual(
             db["COLUMNS"]["Users"],
-            {"UserID": "INT", "UserName": "STRING", "Email": "STRING"},
+            {"UserID": INT, "UserName": STRING, "Email": STRING},
         )
 
     def test_execute_create_table_foreign_key_query(self):
@@ -103,10 +104,10 @@ class TestQueryManager(unittest.TestCase):
         self.assertEqual(
             db["COLUMNS"]["Orders"],
             {
-                "OrderID": "INT",
-                "OrderDate": "STRING",
-                "Amount": "DOUBLE",
-                "UserID": "INT",
+                "OrderID": INT,
+                "OrderDate": STRING,
+                "Amount": DOUBLE,
+                "UserID": INT,
             },
         )
         self.assertIn("FOREIGN_KEYS", db["Orders"])
@@ -152,17 +153,17 @@ class TestQueryManager(unittest.TestCase):
         index = self.storage.load_index()
 
         self.assertIn("Users", db["DATA"])
-        self.assertEqual(len(db["DATA"]["Users"]), 2)
+        self.assertEqual(len(db["DATA"]["Users"]), 3)
         self.assertEqual(db["DATA"]["Users"][1], [2, "Bob", "bob@example.com"])
         self.assertEqual(db["DATA"]["Users"][2], [3, "Charlie", "charlie@example.com"])
 
         self.assertIn("Users", index)
         self.assertIn("UserID", index["Users"])
-        self.assertIn(2, index["Users"]["UserID"])
-        self.assertIn(3, index["Users"]["UserID"])
+        self.assertIn(2, index["Users"]["UserID"]["tree"])
+        self.assertIn(3, index["Users"]["UserID"]["tree"])
 
-        self.assertEqual(index["Users"]["UserID"][2], [1])
-        self.assertEqual(index["Users"]["UserID"][3], [2])
+        self.assertEqual(index["Users"]["UserID"]["tree"][2], [1])
+        self.assertEqual(index["Users"]["UserID"]["tree"][3], [2])
 
     def test_execute_insert_with_foreign_key_query(self):
         self.setup_table_users()
@@ -298,10 +299,10 @@ class TestQueryManager(unittest.TestCase):
             self.ddl_manager.create_table(
                 "Orders",
                 [
-                    ("OrderID", "INT"),
-                    ("OrderDate", "STRING"),
-                    ("Amount", "DOUBLE"),
-                    ("UserID", "INT"),
+                    ("OrderID", INT),
+                    ("OrderDate", STRING),
+                    ("Amount", DOUBLE),
+                    ("UserID", INT),
                 ],
                 primary_key="OrderID",
                 foreign_keys=[("UserID", "Users", "UserID")],

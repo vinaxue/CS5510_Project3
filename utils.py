@@ -17,3 +17,8 @@ def track_time(func):
         return result
 
     return wrapper
+
+
+STRING = "string"
+INT = "int"
+DOUBLE = "double"

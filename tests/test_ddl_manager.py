@@ -5,6 +5,8 @@ from ddl_manager import DDLManager
 from dml_manager import DMLManager
 from BTrees.OOBTree import OOBTree
 
+from utils import INT, STRING
+
 
 class TestDDLManager(unittest.TestCase):
     def setUp(self):
@@ -28,7 +30,7 @@ class TestDDLManager(unittest.TestCase):
         # Create table with primary key and column types
         self.ddl_manager.create_table(
             "users",
-            [("id", "int"), ("name", "string"), ("email", "string")],
+            [("id", INT), ("name", STRING), ("email", STRING)],
             primary_key="id",
         )
 
@@ -37,7 +39,7 @@ class TestDDLManager(unittest.TestCase):
         self.assertEqual(db["TABLES"]["users"]["primary_key"], "id")
         self.assertEqual(
             db["COLUMNS"]["users"],
-            {"id": "int", "name": "string", "email": "string"},
+            {"id": INT, "name": STRING, "email": STRING},
         )
 
         # Check if the index exists for the primary key column
@@ -56,21 +58,21 @@ class TestDDLManager(unittest.TestCase):
     def test_create_duplicate_table(self):
         """Test creating a duplicate table raises an error"""
         self.ddl_manager.create_table(
-            "users", [("id", "int"), ("name", "string")], primary_key="id"
+            "users", [("id", INT), ("name", STRING)], primary_key="id"
         )
         with self.assertRaises(ValueError):
             self.ddl_manager.create_table(
-                "users", [("id", "int"), ("name", "string")], primary_key="id"
+                "users", [("id", INT), ("name", STRING)], primary_key="id"
             )
 
     def test_create_table_with_foreign_keys(self):
         """Test creating a table with foreign keys"""
         self.ddl_manager.create_table(
-            "departments", [("id", "int"), ("name", "string")], primary_key="id"
+            "departments", [("id", INT), ("name", STRING)], primary_key="id"
         )
         self.ddl_manager.create_table(
             "employees",
-            [("id", "int"), ("name", "string"), ("dept_id", "int")],
+            [("id", INT), ("name", STRING), ("dept_id", INT)],
             primary_key="id",
             foreign_keys=[("dept_id", "departments", "id")],
         )
@@ -92,7 +94,7 @@ class TestDDLManager(unittest.TestCase):
     def test_drop_table(self):
         """Test dropping an existing table"""
         self.ddl_manager.create_table(
-            "users", [("id", "int"), ("name", "string")], primary_key="id"
+            "users", [("id", INT), ("name", STRING)], primary_key="id"
         )
         self.ddl_manager.drop_table("users")
         db = self.storage.load_db()
@@ -109,11 +111,11 @@ class TestDDLManager(unittest.TestCase):
     def test_drop_table_with_foreign_key_dependency(self):
         """Test dropping a table that is referenced by a foreign key raises an error"""
         self.ddl_manager.create_table(
-            "departments", [("id", "int"), ("name", "string")], primary_key="id"
+            "departments", [("id", INT), ("name", STRING)], primary_key="id"
         )
         self.ddl_manager.create_table(
             "employees",
-            [("id", "int"), ("name", "string"), ("dept_id", "int")],
+            [("id", INT), ("name", STRING), ("dept_id", INT)],
             primary_key="id",
             foreign_keys=[("dept_id", "departments", "id")],
         )
@@ -126,7 +128,7 @@ class TestDDLManager(unittest.TestCase):
         # Create table and insert data
         self.ddl_manager.create_table(
             "users",
-            [("id", "int"), ("name", "string"), ("email", "string")],
+            [("id", INT), ("name", STRING), ("email", STRING)],
             primary_key="id",
         )
 
@@ -165,7 +167,7 @@ class TestDDLManager(unittest.TestCase):
     def test_create_index_on_nonexistent_column(self):
         """Test creating an index on a column that does not exist"""
         self.ddl_manager.create_table(
-            "users", [("id", "int"), ("name", "string")], primary_key="id"
+            "users", [("id", INT), ("name", STRING)], primary_key="id"
         )
         with self.assertRaises(ValueError):
             self.ddl_manager.create_index("users", "email", index_name="email_index")
@@ -176,7 +178,7 @@ class TestDDLManager(unittest.TestCase):
         # Create table and insert data
         self.ddl_manager.create_table(
             "users",
-            [("id", "int"), ("name", "string"), ("email", "string")],
+            [("id", INT), ("name", STRING), ("email", STRING)],
             primary_key="id",
         )
 

@@ -1,5 +1,7 @@
 from BTrees.OOBTree import OOBTree
 
+from utils import DOUBLE, INT, STRING
+
 
 class DMLManager:
     """Execute data manipulation queries: INSERT, DELETE, UPDATE, SELECT, and optimized JOIN SELECT"""
@@ -44,17 +46,17 @@ class DMLManager:
         table_columns_items = list(self.db["COLUMNS"][table_name].items())
         # Check that each value's type matches the column's expected type
         for i, (col_name, col_type) in enumerate(table_columns_items):
-            if col_type == "int":
+            if col_type == INT:
                 if not isinstance(row[i], int):
                     raise ValueError(
                         f"Column '{col_name}' expects type int, but got {type(row[i]).__name__}."
                     )
-            elif col_type == "string":
+            elif col_type == STRING:
                 if not isinstance(row[i], str):
                     raise ValueError(
                         f"Column '{col_name}' expects type string, but got {type(row[i]).__name__}."
                     )
-            elif col_type == "double":
+            elif col_type == DOUBLE:
                 if not isinstance(row[i], float):
                     raise ValueError(
                         f"Column '{col_name}' expects type double, but got {type(row[i]).__name__}."
