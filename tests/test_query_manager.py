@@ -277,9 +277,11 @@ class TestQueryManager(unittest.TestCase):
         self.query_manager.execute_query(query)
         db = self.storage.load_db()
         index = self.storage.load_index()
-     
+
         self.assertEqual(db["DATA"]["Users"][0][1], "Alice Smith")
-        self.assertEqual(db["DATA"]["Users"][0], [1, "Alice Smith", "alice@example.com"]) 
+        self.assertEqual(
+            db["DATA"]["Users"][0], [1, "Alice Smith", "alice@example.com"]
+        )
         self.assertNotIn("Alice", index["Users"]["UserName"])
         self.assertEqual(index["Users"]["UserName"]["Alice Smith"], [0])
 
@@ -287,20 +289,22 @@ class TestQueryManager(unittest.TestCase):
     def test_execute_delete_query(self):
         self.setup_table_users()
         self.insert_user(1, "Alice Smith", "alice@example.com")
+        self.insert_user(2, "Bob Smith", "bob@example.com")
+        self.insert_user(3, "Charlie Smith", "Charlie@example.com")
 
         db = self.storage.load_db()
         index = self.storage.load_index()
 
         query = "CREATE INDEX idx_UserName ON Users(UserName)"
         self.query_manager.execute_query(query)
-        
+
         query = "DELETE FROM Users WHERE UserID = 1"
         self.query_manager.execute_query(query)
 
         db = self.storage.load_db()
         index = self.storage.load_index()
 
-        self.assertEqual(len(db["DATA"]["Users"]), 0)
+        self.assertEqual(len(db["DATA"]["Users"]), 2)
         self.assertNotIn(1, index["Users"]["UserID"])
         self.assertNotIn("Alice Smith", index["Users"]["UserName"])
 
