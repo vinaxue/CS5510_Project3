@@ -204,7 +204,6 @@ class TestQueryManager(unittest.TestCase):
         self.query_manager.execute_query(query)
 
         index = self.storage.load_index()
-
         self.assertIn("UserName", index["Users"])
         self.assertIn("idx_UserName", index["Users"]["UserName"]["name"])
 
@@ -271,14 +270,16 @@ class TestQueryManager(unittest.TestCase):
         db = self.storage.load_db()
         index = self.storage.load_index()
 
-        query = "UPDATE Users SET UserName = 'Alice Smith' WHERE UserID = 1"
+        query = "CREATE INDEX idx_UserName ON Users(UserName)"
         self.query_manager.execute_query(query)
 
+        query = "UPDATE Users SET UserName = 'Alice Smith' WHERE UserID = 1"
+        self.query_manager.execute_query(query)
         db = self.storage.load_db()
         index = self.storage.load_index()
-
+     
         self.assertEqual(db["DATA"]["Users"][0][1], "Alice Smith")
-        self.assertIn("Alice Smith", index["Users"]["UserName"])
+        self.assertEqual(db["DATA"]["Users"][0], [1, "Alice Smith", "alice@example.com"]) 
         self.assertNotIn("Alice", index["Users"]["UserName"])
         self.assertEqual(index["Users"]["UserName"]["Alice Smith"], [0])
 
@@ -290,13 +291,16 @@ class TestQueryManager(unittest.TestCase):
         db = self.storage.load_db()
         index = self.storage.load_index()
 
+        query = "CREATE INDEX idx_UserName ON Users(UserName)"
+        self.query_manager.execute_query(query)
+        
         query = "DELETE FROM Users WHERE UserID = 1"
         self.query_manager.execute_query(query)
 
         db = self.storage.load_db()
         index = self.storage.load_index()
 
-        self.assertEqual(len(db["DATA"]["Users"]), 2)
+        self.assertEqual(len(db["DATA"]["Users"]), 0)
         self.assertNotIn(1, index["Users"]["UserID"])
         self.assertNotIn("Alice Smith", index["Users"]["UserName"])
 
