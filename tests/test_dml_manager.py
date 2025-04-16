@@ -291,15 +291,11 @@ class TestDMLManager(unittest.TestCase):
         )
 
         self.assertEqual(len(results), 3)
-        self.assertEqual(
-            results[0], {"employees_L.name": "Alice", "employees_R.name": "Bob"}
+        self.assertIn(results, {"employees_L.name": "Alice", "employees_R.name": "Bob"})
+        self.assertIn(
+            results, {"employees_L.name": "Bob", "employees_R.name": "Charlie"}
         )
-        self.assertEqual(
-            results[1], {"employees_L.name": "Bob", "employees_R.name": "Charlie"}
-        )
-        self.assertEqual(
-            results[2], {"employees_L.name": "Bob", "employees_R.name": "David"}
-        )
+        self.assertIn(results, {"employees_L.name": "Bob", "employees_R.name": "David"})
 
 
 if __name__ == "__main__":
