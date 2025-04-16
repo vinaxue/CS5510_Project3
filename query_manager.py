@@ -322,35 +322,22 @@ class QueryManager:
                     )
 
                     if "." in where_column:
-                        table, column_name = where_column.split(".")
+                        table_prefix, column_name = where_column.split(".")
+                        key_name = f"{table_prefix}.{column_name}"
                     else:
-                        table = table_name
-                        column_name = where_column
+                    
+                        key_name = where_column if len(from_clause) == 1 else f"{table_name}.{where_column}"
 
-                    # Get column index in that table
-                    db = self.storage_manager.db
-                    table_columns = db["COLUMNS"][table]
-                    column_names = list(table_columns.keys())
-                    where_column_index = column_names.index(column_name)
-
-                    print(column_names, column_name, where_column_index)
+                    print("Using where key:", key_name)
 
                     if where_operator == "=":
-                        where_function = (
-                            lambda row: row[where_column_index] == where_value
-                        )
+                        where_function = lambda row: row.get(key_name) == where_value
                     elif where_operator == ">":
-                        where_function = (
-                            lambda row: row[where_column_index] > where_value
-                        )
+                        where_function = lambda row: row.get(key_name) > where_value
                     elif where_operator == "<":
-                        where_function = (
-                            lambda row: row[where_column_index] < where_value
-                        )
+                        where_function = lambda row: row.get(key_name) < where_value
                     else:
-                        raise Exception(
-                            f"Unsupported condition operator: {where_operator}"
-                        )
+                        raise Exception(f"Unsupported condition operator: {where_operator}")
 
                 # Process JOINs, if any
                 if len(from_clause) > 1:

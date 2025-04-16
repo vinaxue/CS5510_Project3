@@ -116,38 +116,30 @@ class DMLManager:
         self.storage_manager.save_index()
 
     def select(self, table_name, columns=None, where=None):
-        """
-        Selects rows from a table.
-        :param table_name: The name of the table.
-        :param columns: A list of column names to retrieve; if None, all columns are returned.
-        :param where: A callable that takes a row (list) and returns True if the row matches the condition.
-        :return: A list of rows (each row is a dict mapping column names to values).
-        """
         self.reload()
 
-        if table_name not in self.db["TABLES"]:
-            raise ValueError(f"Table '{table_name}' does not exist")
-
+    
         table_columns = self.db["COLUMNS"][table_name]
-        column_names = list(table_columns.keys())
-        result = []
+        col_names = list(table_columns.keys())
 
-        for row in self.db["DATA"][table_name]:
-            if where is None or where(row):
-                if columns is None:
-                    result.append(dict(zip(column_names, row)))
-                else:
-                    selected = {}
+        results = []
+        for row_list in self.db["DATA"][table_name]:
+
+            row_dict = dict(zip(col_names, row_list))
+
+            if where is None or where(row_dict):
+    
+                if columns is not None:
+                    filtered_dict = {}
                     for col in columns:
-                        if col not in table_columns:
-                            raise ValueError(
-                                f"Column '{col}' does not exist in table '{table_name}'"
-                            )
-                        selected[col] = row[list(table_columns.keys()).index(col)]
-                    result.append(selected)
+                        filtered_dict[col] = row_dict[col]
+                    results.append(filtered_dict)
+                else:
+            
+                    results.append(row_dict)
 
-        return result
-
+        return results
+    
     def delete(self, table_name, where=None):
         """
         Deletes rows from a table.
@@ -192,15 +184,6 @@ class DMLManager:
         return delete_count
 
     def update(self, table_name, updates, where=None):
-        """
-        Updates rows in a table.
-        :param table_name: The name of the table.
-        :param updates: A dictionary mapping column names to new values, or to a function that computes the new value.
-                        Example: {'age': lambda x: x + 1} or {'name': 'Alice'}
-        :param where: A callable that takes a row and returns True if the row should be updated.
-                      If None, all rows are updated.
-        :return: The number of rows updated.
-        """
         self.reload()
 
         if table_name not in self.db["TABLES"]:
@@ -219,7 +202,6 @@ class DMLManager:
                             f"Column '{col}' does not exist in table '{table_name}'"
                         )
                     col_index = list(table_columns.keys()).index(col)
-                    # If new_value is a callable, compute the updated value based on the old value
                     new_row[col_index] = (
                         new_value(new_row[col_index])
                         if callable(new_value)
@@ -228,22 +210,42 @@ class DMLManager:
                 data[idx] = new_row
                 update_count += 1
 
-        # Rebuild indexes for this table if they exist
         if table_name in self.index:
-            for col in self.index[table_name]:
-                self.index[table_name][col] = OOBTree()
+     
+            for col, index_info in self.index[table_name].items():
+        
+                if isinstance(index_info, dict):
+                    old_name = index_info.get("name", f"{table_name}_{col}_idx")
+                    
+                    new_tree = OOBTree()
+          
+                    self.index[table_name][col] = {
+                        "tree": new_tree,
+                        "name": old_name
+                    }
+                else:
+              
+                    new_tree = OOBTree()
+                    self.index[table_name][col] = {
+                        "tree": new_tree,
+                        "name": f"{table_name}_{col}_idx"
+                    }
+
             for row_id, row in enumerate(data):
-                for col, tree in self.index[table_name].items():
+                for col, index_info in self.index[table_name].items():
+                    tree = index_info["tree"]
                     col_index = list(table_columns.keys()).index(col)
                     value = row[col_index]
                     if value not in tree:
                         tree[value] = []
                     tree[value].append(row_id)
+    
 
         self.storage_manager.save_db()
         self.storage_manager.save_index()
 
         return update_count
+
 
     def select_join_with_index(
         self,
