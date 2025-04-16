@@ -27,7 +27,6 @@ class QueryManager:
         self.storage_manager = storage_manager
         self.ddl_manager = ddl_manager
         self.dml_manager = dml_manager
-
         self.identifier = Word(alphas, alphanums + "_").setName("identifier")
         self.qualified_identifier = Combine(
             self.identifier + ZeroOrMore("." + self.identifier)
@@ -85,12 +84,29 @@ class QueryManager:
 
         self.select_stmt = Forward()
 
-        self.where_condition = Group(
-            self.WHERE
-            + self.qualified_identifier
-            + oneOf("= > < >= <=")
-            + (self.constant | self.qualified_identifier)
+        # --- Multi-condition WHERE support begins ---
+        # Placeholder for recursive condition definition
+        self.condition = Forward()
+
+        # Define a single simple condition: qualified_identifier operator (constant | qualified_identifier)
+        self.simple_condition = Group(
+            self.qualified_identifier("left")
+            + oneOf("= > < >= <=")("operator")
+            + (self.constant | self.qualified_identifier)("right")
         )
+
+        # Allow chaining of simple_condition via AND/OR recursively
+        self.condition <<= self.simple_condition + ZeroOrMore(
+            (CaselessKeyword("AND") | CaselessKeyword("OR"))("logic")
+            + self.condition
+        )
+
+        # Combine the WHERE keyword with the full recursive condition
+        self.where_condition = Group(
+            self.WHERE + self.condition
+        )("where")
+        # --- Multi-condition WHERE support ends ---
+
         self.group_by_clause = Group(self.GROUP + self.BY + self.column_list)
         self.order_by_clause = Group(self.ORDER + self.BY + self.column_list)
 
@@ -229,6 +245,64 @@ class QueryManager:
                 ) from e
         return results
 
+    def _build_condition_fn(self, tokens):
+        """
+        递归地把 tokens（ParseResults 或列表）转成一个 Python 函数 f(row)->bool。
+        tokens 的格式是 [simple_cond, ('AND'|'OR'), subcond, ...]，
+        simple_cond 本身是一个三元列表 [col, op, val]。
+        """
+        # simple part
+        simple = tokens[0]
+        col, op, raw = simple[0], simple[1], simple[2]
+        # 把 raw 转成 Python 值
+        try:
+            val = int(raw)
+        except:
+            try:
+                val = float(raw)
+            except:
+                val = raw
+        # 构造最内层的函数
+        if op == "=":
+            funcs = [lambda row, c=col, v=val: row.get(c) == v]
+        elif op == "<":
+            funcs = [lambda row, c=col, v=val: row.get(c) < v]
+        elif op == ">":
+            funcs = [lambda row, c=col, v=val: row.get(c) > v]
+        else:
+            raise Exception(f"Unsupported operator: {op}")
+
+        ops = []
+        # 如果后面还有 AND/OR + subcondition
+        idx = 1
+        while idx < len(tokens):
+            logic = tokens[idx].upper()
+            sub = tokens[idx+1]
+            ops.append(logic)
+            # 递归
+            funcs.append(self._build_condition_fn(sub))
+            idx += 2
+
+        # 最终合并所有函数
+        def where_fn(row):
+            res = funcs[0](row)
+            for logic, f in zip(ops, funcs[1:]):
+                if logic == "AND":
+                    res = res and f(row)
+                else:
+                    res = res or f(row)
+            return res
+
+        return where_fn
+
+    def _build_where_fn(self, where_parse):
+        """
+        where_parse 是 parse_query 得到的 where_condition，形如
+        ['WHERE', cond_tokens...]
+        跳过第 0 个 'WHERE'，把余下 tokens 传给 _build_condition_fn
+        """
+        cond_tokens = where_parse[1:]  # 去掉 'WHERE'
+        return self._build_condition_fn(cond_tokens)
     def execute_query(self, query: str):
         """
         Execute the parsed query.
@@ -485,15 +559,15 @@ class QueryManager:
 
 if __name__ == "__main__":
 
-    stor_mgr = StorageManager()  # 1) 实例化 StorageManager
-    ddl_mgr = DDLManager(stor_mgr)  # 2) 传给 DDLManager
+    stor_mgr = StorageManager()  
+    ddl_mgr = DDLManager(stor_mgr) 
     dml_mgr = DMLManager(stor_mgr)
 
-    # 将这两个对象传入 QueryManager 的构造函数
+    
     qm = QueryManager(stor_mgr, ddl_mgr, dml_mgr)
 
     multi_query = """
-    UPDATE Users SET UserName = 'Alice Smith' WHERE UserID = 1;
+    SELECT * FROM employees WHERE age >= 30 AND salary < 5000 OR department = 'Sales';
     """
 
     try:
