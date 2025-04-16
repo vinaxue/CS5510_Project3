@@ -249,50 +249,6 @@ class DMLManager:
 
         return results
 
-        # table_columns = self.db["COLUMNS"][table_name]
-        # col_names = list(table_columns.keys())
-
-        # results = []
-        # rows = []
-        # for row_list in self.db["DATA"][table_name]:
-        #     row_dict = dict(zip(col_names, row_list))
-        #     if where is None or where(row_dict):
-        #         rows.append(row_dict)
-        #         if not group_by and not aggregates:
-        #             if columns is not None:
-        #                 for row in rows:
-        #                     results.append({col: row[col] for col in columns})
-        #             else:
-        #                 results.append(rows)
-        #         else:
-        #             groups = defaultdict(list)
-        #             for row in rows:
-        #                 key = tuple(row[col] for col in group_by)
-        #                 groups[key].append(row)
-
-        #             for group_key, group_rows in groups.items():
-        #                 result_row = {}
-
-        #                 for i, col in enumerate(group_by):
-        #                     result_row[col] = group_key[i]
-
-        #                 # Apply aggregates
-        #                 for agg_func, col in aggregates.items():
-        #                     values = [r[col] for r in group_rows if r[col] is not None]
-        #                     if not values:
-        #                         result_row[col] = None
-        #                     elif agg_func == "MAX":
-        #                         result_row[col] = max(values)
-        #                     elif agg_func == "MIN":
-        #                         result_row[col] = min(values)
-        #                     elif agg_func == "SUM":
-        #                         result_row[col] = sum(values)
-        #                     else:
-        #                         raise ValueError(f"Unsupported aggregate: {agg_func}")
-
-        #                 results.append(result_row)
-        # return results
-
     def delete(self, table_name, where=None):
         """
         Deletes rows from a table.
@@ -403,24 +359,40 @@ class DMLManager:
         right_join_col,
         columns=None,
         where=None,
+        left_alias=None,
+        right_alias=None,
     ):
         """
-        Optimized SELECT JOIN based on an equality condition using index or a hash table.
+        Optimized SELECT JOIN based on an equality condition using an index or a hash table.
 
         :param left_table: Name of the left table.
         :param right_table: Name of the right table.
-        :param left_join_col: Column in the left table used for join.
-        :param right_join_col: Column in the right table used for join.
-        :param columns: List of columns to return in the format "Table.Column".
-                        If None, returns all columns from both tables.
-        :param where: A callable that accepts a joined row (dict) and returns True
-                    if the row meets the filter condition. If None, no additional filtering.
+        :param left_join_col: Column name in the left table used for joining.
+        :param right_join_col: Column name in the right table used for joining.
+        :param columns: List of columns to return in the format "Alias.Column". If None, returns all columns from both tables.
+        :param where: A callable that accepts a joined row (dict) and returns True if the row meets the filter condition.
+                    If None, no additional filtering is applied.
+        :param left_alias: Optional alias for the left table. If not provided and a self join occurs, a default alias is used.
+        :param right_alias: Optional alias for the right table. If not provided and a self join occurs, a default alias is used.
         :return: A list of dictionaries representing the joined rows.
         """
+        # Reload the latest database and index
         self.reload()
 
+        # Validate that both tables exist
         if left_table not in self.db["TABLES"] or right_table not in self.db["TABLES"]:
             raise ValueError("One or both tables do not exist.")
+
+        # If aliases are not provided, and this is a self-join, assign default aliases to differentiate the two sides.
+        if left_alias is None or right_alias is None:
+            if left_table == right_table:
+                left_alias = f"{left_table}_L"
+                right_alias = f"{right_table}_R"
+            else:
+                left_alias = left_table
+                right_alias = right_table
+
+        # Retrieve column definitions and data for both tables.
         left_columns_dict = self.db["COLUMNS"][left_table]
         right_columns_dict = self.db["COLUMNS"][right_table]
         left_data = self.db["DATA"][left_table]
@@ -429,6 +401,7 @@ class DMLManager:
         left_columns_list = list(left_columns_dict.keys())
         right_columns_list = list(right_columns_dict.keys())
 
+        # Get the index positions for the join columns in both tables.
         try:
             left_col_idx = left_columns_list.index(left_join_col)
             right_col_idx = right_columns_list.index(right_join_col)
@@ -437,43 +410,43 @@ class DMLManager:
                 f"Join column {left_join_col} or {right_join_col} not found."
             )
 
+        # Use the index on the right table if available to optimize the join.
         if right_table in self.index and right_join_col in self.index[right_table]:
-
             right_index = self.index[right_table][right_join_col]
-
             right_index_dict = {}
             for key in right_index:
                 row_id_list = right_index[key]
+                # For each key, create a list of tuples: (row_id, corresponding row data)
                 right_index_dict[key] = [(rid, right_data[rid]) for rid in row_id_list]
         else:
-
+            # If no index exists, build a hash table using the right join column.
             right_index_dict = {}
             for row_id, row in enumerate(right_data):
                 key = row[right_col_idx]
                 right_index_dict.setdefault(key, []).append((row_id, row))
 
         joined_results = []
+        # Loop through each row in the left table.
         for left_row in left_data:
             join_value = left_row[left_col_idx]
+            # Check if there are matching rows in the right table via the hash table or index.
             if join_value in right_index_dict:
                 for _, right_row in right_index_dict[join_value]:
                     joined_row = {}
-
+                    # Build the left part of the joined row using the left table alias.
                     for idx, col in enumerate(left_columns_list):
-                        joined_row[f"{left_table}.{col}"] = left_row[idx]
+                        joined_row[f"{left_alias}.{col}"] = left_row[idx]
+                    # Build the right part of the joined row using the right table alias.
                     for idx, col in enumerate(right_columns_list):
-                        joined_row[f"{right_table}.{col}"] = right_row[idx]
-
+                        joined_row[f"{right_alias}.{col}"] = right_row[idx]
+                    # Apply the where-filter if provided.
                     if where is None or where(joined_row):
-
                         if columns is None:
                             joined_results.append(joined_row)
                         else:
                             filtered_row = {}
                             for c in columns:
-
                                 if c in joined_row:
                                     filtered_row[c] = joined_row[c]
                             joined_results.append(filtered_row)
-
         return joined_results
