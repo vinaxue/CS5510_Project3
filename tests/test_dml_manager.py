@@ -233,6 +233,44 @@ class TestDMLManager(unittest.TestCase):
         self.assertEqual(results[0]["users.name"], "Alice")
         self.assertEqual(results[0]["orders.amount"], 99.99)
 
+    def test_select_join_with_self(self):
+        """Test joining a table with itself"""
+        # Insert test data
+        self.ddl_manager.create_table(
+            "employees",
+            [("emp_id", INT), ("name", STRING), ("email", STRING), ("manager_id", INT)],
+            primary_key="emp_id",
+            foreign_keys=[("manager_id", "employees", "emp_id")],
+        )
+        self.dml_manager.insert("employees", [1, "Alice", "alice.example.com", 0])
+        self.dml_manager.insert("employees", [2, "Bob", "bob@example.com", 1])
+        self.dml_manager.insert("employees", [3, "Charlie", "charlie@example.com", 2])
+        self.dml_manager.insert("employees", [4, "David", "david@example.com", 2])
+
+        # Perform join
+        results = self.dml_manager.select_join_with_index(
+            left_table="employees",
+            right_table="employees",
+            left_join_col="emp_id",
+            right_join_col="manager_id",
+        )
+
+        print(results)
+
+        # Verify results
+        # self.assertEqual(len(results), 3)
+
+        # # Check that all joins are correct
+        # user_orders = {}
+        # for row in results:
+        #     user_id = row["users.id"]
+        #     if user_id not in user_orders:
+        #         user_orders[user_id] = []
+        #     user_orders[user_id].append(row["orders.order_id"])
+
+        # self.assertEqual(sorted(user_orders[1]), [101, 103])
+        # self.assertEqual(user_orders[2], [102])
+
 
 if __name__ == "__main__":
     unittest.main()
