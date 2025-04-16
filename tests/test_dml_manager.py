@@ -104,6 +104,40 @@ class TestDMLManager(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], 2)
 
+    def test_select_with_two_conditions_and(self):
+        """Test selecting with a where condition"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+        self.dml_manager.insert("users", [3, "Charlie", "charlie@example.com"])
+
+        # Select users with id > 1 and name = 'Bob'
+        results = self.dml_manager.select(
+            "users",
+            where={"op": "AND", "left": ["id", ">", 1], "right": ["name", "=", "Bob"]},
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["id"], 2)
+        self.assertEqual(results[0]["name"], "Bob")
+
+    def test_select_with_two_conditions_or(self):
+        """Test selecting with a where condition"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+        self.dml_manager.insert("users", [3, "Charlie", "charlie@example.com"])
+
+        # Select users with id = 1 or name = 'Bob'
+        results = self.dml_manager.select(
+            "users",
+            where={"op": "OR", "left": ["id", "=", 1], "right": ["name", "=", "Bob"]},
+        )
+        self.assertEqual(len(results), 2)
+        ids = [result["id"] for result in results]
+        names = [result["name"] for result in results]
+        self.assertIn(1, ids)
+        self.assertIn(2, ids)
+        self.assertIn("Alice", names)
+        self.assertIn("Bob", names)
+
     ########################## DELETE TESTS ##########################
     def test_delete_all_rows(self):
         """Test deleting all rows from a table"""
@@ -249,27 +283,23 @@ class TestDMLManager(unittest.TestCase):
 
         # Perform join
         results = self.dml_manager.select_join_with_index(
-            left_table="employees",
-            right_table="employees",
+            left_table="employees",  # employees_L = manager
+            right_table="employees",  # employees_R = employee
             left_join_col="emp_id",
             right_join_col="manager_id",
+            columns=["employees_L.name", "employees_R.name"],
         )
 
-        print(results)
-
-        # Verify results
-        # self.assertEqual(len(results), 3)
-
-        # # Check that all joins are correct
-        # user_orders = {}
-        # for row in results:
-        #     user_id = row["users.id"]
-        #     if user_id not in user_orders:
-        #         user_orders[user_id] = []
-        #     user_orders[user_id].append(row["orders.order_id"])
-
-        # self.assertEqual(sorted(user_orders[1]), [101, 103])
-        # self.assertEqual(user_orders[2], [102])
+        self.assertEqual(len(results), 3)
+        self.assertEqual(
+            results[0], {"employees_L.name": "Alice", "employees_R.name": "Bob"}
+        )
+        self.assertEqual(
+            results[1], {"employees_L.name": "Bob", "employees_R.name": "Charlie"}
+        )
+        self.assertEqual(
+            results[2], {"employees_L.name": "Bob", "employees_R.name": "David"}
+        )
 
 
 if __name__ == "__main__":

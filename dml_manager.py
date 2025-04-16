@@ -158,6 +158,10 @@ class DMLManager:
         if isinstance(where, dict) and where["op"] in ("AND", "OR"):
             left_rows = get_indexed_rows(where["left"])
             right_rows = get_indexed_rows(where["right"])
+            if left_rows is None:
+                left_rows = table_data
+            if right_rows is None:
+                right_rows = table_data
 
             if (
                 where["op"] == "AND"
