@@ -32,6 +32,10 @@
         - '='
         - '>'
         - '<'
+     3. Aggregation (GROUP BY)
+        - MIN
+        - MAX
+        - SUM
   3. DELETE
   4. UPDATE
 

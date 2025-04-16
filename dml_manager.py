@@ -1,3 +1,4 @@
+from collections import defaultdict
 from BTrees.OOBTree import OOBTree
 
 from utils import DOUBLE, INT, STRING
@@ -115,31 +116,183 @@ class DMLManager:
         self.storage_manager.save_db()
         self.storage_manager.save_index()
 
-    def select(self, table_name, columns=None, where=None):
+    def select(
+        self, table_name, columns=None, where=None, group_by=None, aggregates=None
+    ):
+        """
+        Selects rows from a table based on optional filtering and aggregation.
+        :param table_name: The name of the table.
+        :param columns: List of columns to select. If None, selects all columns.
+        :param where: List of conditions to filter rows. If None, no filtering is applied.
+            e.g. {"op": "AND", "left":["col1", "op", "val"], "right": ["col2", "op", "val"]}
+            or ["col1", "op", "val"]
+        :param group_by: List of columns to group by. If None, no grouping is applied.
+        :param aggregates: Dictionary of aggregate functions to apply, e.g., {"SUM": "column_name"}.
+        :return: A list of dictionaries representing the selected rows.
+        """
+
         self.reload()
 
-    
         table_columns = self.db["COLUMNS"][table_name]
         col_names = list(table_columns.keys())
-
+        table_data = self.db["DATA"][table_name]
         results = []
-        for row_list in self.db["DATA"][table_name]:
 
+        indexed_rows = None
+        row_source = table_data
+
+        def get_indexed_rows(cond):
+            if isinstance(cond, list) and len(cond) == 3:
+                col, op, val = cond
+                if (
+                    op == "="
+                    and table_name in self.index
+                    and col in self.index[table_name]
+                ):
+                    tree = self.index[table_name][col]["tree"]
+                    if val in tree:
+                        row_ids = tree[val]
+                        return [table_data[i] for i in row_ids]
+            return None
+
+        if isinstance(where, dict) and where["op"] in ("AND", "OR"):
+            left_rows = get_indexed_rows(where["left"])
+            right_rows = get_indexed_rows(where["right"])
+
+            if (
+                where["op"] == "AND"
+                and left_rows is not None
+                and right_rows is not None
+            ):
+                left_ids = {tuple(r) for r in left_rows}
+                right_ids = {tuple(r) for r in right_rows}
+                intersection = left_ids & right_ids
+                indexed_rows = [list(row) for row in intersection]
+            elif where["op"] == "OR":
+                combined_set = set()
+                for cond_rows in [left_rows, right_rows]:
+                    if cond_rows is not None:
+                        combined_set.update(tuple(r) for r in cond_rows)
+                if combined_set:
+                    indexed_rows = [list(row) for row in combined_set]
+        elif isinstance(where, list):
+            indexed_rows = get_indexed_rows(where)
+
+        if indexed_rows is not None:
+            row_source = indexed_rows
+
+        def eval_condition(cond, row):
+            col, op, val = cond
+            v = row[col]
+            if op == "=":
+                return v == val
+            if op == "!=":
+                return v != val
+            if op == "<":
+                return v < val
+            if op == "<=":
+                return v <= val
+            if op == ">":
+                return v > val
+            if op == ">=":
+                return v >= val
+            return False
+
+        def match(row):
+            if where is None:
+                return True
+            if isinstance(where, list):
+                return eval_condition(where, row)
+            elif isinstance(where, dict) and where["op"] in ("AND", "OR"):
+                left = eval_condition(where["left"], row)
+                right = eval_condition(where["right"], row)
+                return (left and right) if where["op"] == "AND" else (left or right)
+            return False
+
+        filtered_rows = []
+        for row_list in row_source:
             row_dict = dict(zip(col_names, row_list))
+            if match(row_dict):
+                filtered_rows.append(row_dict)
 
-            if where is None or where(row_dict):
-    
-                if columns is not None:
-                    filtered_dict = {}
-                    for col in columns:
-                        filtered_dict[col] = row_dict[col]
-                    results.append(filtered_dict)
+        if group_by is None and aggregates is None:
+            for row in filtered_rows:
+                if columns:
+                    results.append({col: row[col] for col in columns})
                 else:
-            
-                    results.append(row_dict)
+                    results.append(row)
+            return results
+
+        groups = defaultdict(list)
+        for row in filtered_rows:
+            key = tuple(row[col] for col in group_by)
+            groups[key].append(row)
+
+        for group_key, group_rows in groups.items():
+            result_row = {col: group_key[i] for i, col in enumerate(group_by)}
+
+            for col, agg_func in aggregates.items():
+                values = [r[col] for r in group_rows if r[col] is not None]
+
+                if not values:
+                    result_row[col] = None
+                elif agg_func == "MAX":
+                    result_row[col] = max(values)
+                elif agg_func == "MIN":
+                    result_row[col] = min(values)
+                elif agg_func == "SUM":
+                    result_row[col] = sum(values)
+                else:
+                    raise ValueError(f"Unsupported aggregate: {agg_func}")
+
+            results.append(result_row)
 
         return results
-    
+
+        # table_columns = self.db["COLUMNS"][table_name]
+        # col_names = list(table_columns.keys())
+
+        # results = []
+        # rows = []
+        # for row_list in self.db["DATA"][table_name]:
+        #     row_dict = dict(zip(col_names, row_list))
+        #     if where is None or where(row_dict):
+        #         rows.append(row_dict)
+        #         if not group_by and not aggregates:
+        #             if columns is not None:
+        #                 for row in rows:
+        #                     results.append({col: row[col] for col in columns})
+        #             else:
+        #                 results.append(rows)
+        #         else:
+        #             groups = defaultdict(list)
+        #             for row in rows:
+        #                 key = tuple(row[col] for col in group_by)
+        #                 groups[key].append(row)
+
+        #             for group_key, group_rows in groups.items():
+        #                 result_row = {}
+
+        #                 for i, col in enumerate(group_by):
+        #                     result_row[col] = group_key[i]
+
+        #                 # Apply aggregates
+        #                 for agg_func, col in aggregates.items():
+        #                     values = [r[col] for r in group_rows if r[col] is not None]
+        #                     if not values:
+        #                         result_row[col] = None
+        #                     elif agg_func == "MAX":
+        #                         result_row[col] = max(values)
+        #                     elif agg_func == "MIN":
+        #                         result_row[col] = min(values)
+        #                     elif agg_func == "SUM":
+        #                         result_row[col] = sum(values)
+        #                     else:
+        #                         raise ValueError(f"Unsupported aggregate: {agg_func}")
+
+        #                 results.append(result_row)
+        # return results
+
     def delete(self, table_name, where=None):
         """
         Deletes rows from a table.
@@ -211,24 +364,21 @@ class DMLManager:
                 update_count += 1
 
         if table_name in self.index:
-     
+
             for col, index_info in self.index[table_name].items():
-        
+
                 if isinstance(index_info, dict):
                     old_name = index_info.get("name", f"{table_name}_{col}_idx")
-                    
+
                     new_tree = OOBTree()
-          
-                    self.index[table_name][col] = {
-                        "tree": new_tree,
-                        "name": old_name
-                    }
+
+                    self.index[table_name][col] = {"tree": new_tree, "name": old_name}
                 else:
-              
+
                     new_tree = OOBTree()
                     self.index[table_name][col] = {
                         "tree": new_tree,
-                        "name": f"{table_name}_{col}_idx"
+                        "name": f"{table_name}_{col}_idx",
                     }
 
             for row_id, row in enumerate(data):
@@ -239,13 +389,11 @@ class DMLManager:
                     if value not in tree:
                         tree[value] = []
                     tree[value].append(row_id)
-    
 
         self.storage_manager.save_db()
         self.storage_manager.save_index()
 
         return update_count
-
 
     def select_join_with_index(
         self,
@@ -265,7 +413,7 @@ class DMLManager:
         :param right_join_col: Column in the right table used for join.
         :param columns: List of columns to return in the format "Table.Column".
                         If None, returns all columns from both tables.
-        :param where: A callable that accepts a joined row (dict) and returns True 
+        :param where: A callable that accepts a joined row (dict) and returns True
                     if the row meets the filter condition. If None, no additional filtering.
         :return: A list of dictionaries representing the joined rows.
         """
@@ -278,28 +426,27 @@ class DMLManager:
         left_data = self.db["DATA"][left_table]
         right_data = self.db["DATA"][right_table]
 
-      
         left_columns_list = list(left_columns_dict.keys())
         right_columns_list = list(right_columns_dict.keys())
 
-        
         try:
             left_col_idx = left_columns_list.index(left_join_col)
             right_col_idx = right_columns_list.index(right_join_col)
         except ValueError:
-            raise ValueError(f"Join column {left_join_col} or {right_join_col} not found.")
+            raise ValueError(
+                f"Join column {left_join_col} or {right_join_col} not found."
+            )
 
-        
         if right_table in self.index and right_join_col in self.index[right_table]:
-            
+
             right_index = self.index[right_table][right_join_col]
-            
+
             right_index_dict = {}
             for key in right_index:
                 row_id_list = right_index[key]
                 right_index_dict[key] = [(rid, right_data[rid]) for rid in row_id_list]
         else:
-           
+
             right_index_dict = {}
             for row_id, row in enumerate(right_data):
                 key = row[right_col_idx]
@@ -318,13 +465,13 @@ class DMLManager:
                         joined_row[f"{right_table}.{col}"] = right_row[idx]
 
                     if where is None or where(joined_row):
-                       
+
                         if columns is None:
                             joined_results.append(joined_row)
                         else:
                             filtered_row = {}
                             for c in columns:
-                             
+
                                 if c in joined_row:
                                     filtered_row[c] = joined_row[c]
                             joined_results.append(filtered_row)

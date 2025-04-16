@@ -32,11 +32,11 @@ class QueryManager:
         self.qualified_identifier = Combine(
             self.identifier + ZeroOrMore("." + self.identifier)
         )
-        
+
         integer = Word(nums)
         float_literal = Combine(Optional(oneOf("+ -")) + Word(nums) + "." + Word(nums))
         self.numeric_literal = float_literal | Combine(Optional(oneOf("+ -")) + integer)
-        #self.numeric_literal = Combine(Optional(oneOf("+ -")) + integer)
+        # self.numeric_literal = Combine(Optional(oneOf("+ -")) + integer)
         self.string_literal = quotedString.setParseAction(removeQuotes)
         self.constant = self.numeric_literal | self.string_literal
 
@@ -185,7 +185,7 @@ class QueryManager:
             + self.table_name("table")
             + Optional(self.where_condition("where"))
         )
-        
+
         self.drop_table_stmt = self.DROP + self.TABLE + self.table_name("table_name")
 
         self.update_stmt = (
@@ -195,8 +195,8 @@ class QueryManager:
             + Group(
                 delimitedList(
                     Group(
-                        self.identifier("col") 
-                        + Suppress("=") 
+                        self.identifier("col")
+                        + Suppress("=")
                         + (self.constant | self.qualified_identifier)("val")
                     )
                 )
@@ -214,8 +214,6 @@ class QueryManager:
             | self.delete_stmt("delete")
             | self.update_stmt("update")
         )
-
-      
 
     def parse_query(self, queries: str):
 
@@ -325,8 +323,12 @@ class QueryManager:
                         table_prefix, column_name = where_column.split(".")
                         key_name = f"{table_prefix}.{column_name}"
                     else:
-                    
-                        key_name = where_column if len(from_clause) == 1 else f"{table_name}.{where_column}"
+
+                        key_name = (
+                            where_column
+                            if len(from_clause) == 1
+                            else f"{table_name}.{where_column}"
+                        )
 
                     print("Using where key:", key_name)
 
@@ -337,7 +339,9 @@ class QueryManager:
                     elif where_operator == "<":
                         where_function = lambda row: row.get(key_name) < where_value
                     else:
-                        raise Exception(f"Unsupported condition operator: {where_operator}")
+                        raise Exception(
+                            f"Unsupported condition operator: {where_operator}"
+                        )
 
                 # Process JOINs, if any
                 if len(from_clause) > 1:
@@ -360,10 +364,10 @@ class QueryManager:
                     results = self.dml_manager.select(
                         table_name=table_name,
                         columns=selected_columns,
-                        where=where_function,
+                        where=[where_column, where_operator, where_value],
                     )
                 return results
-            
+
             elif command == "DELETE":
                 # DELETE FROM <table> [WHERE condition]
                 table_name = parsed_query["table"]
@@ -389,33 +393,37 @@ class QueryManager:
                         table_for_where = table_name
                         column_name = where_column
 
-                   
                     db = self.storage_manager.db
                     table_columns = db["COLUMNS"][table_for_where]
                     column_names = list(table_columns.keys())
                     where_column_index = column_names.index(column_name)
 
                     if where_operator == "=":
-                        where_function = lambda row: row[where_column_index] == where_value
+                        where_function = (
+                            lambda row: row[where_column_index] == where_value
+                        )
                     elif where_operator == ">":
-                        where_function = lambda row: row[where_column_index] > where_value
+                        where_function = (
+                            lambda row: row[where_column_index] > where_value
+                        )
                     elif where_operator == "<":
-                        where_function = lambda row: row[where_column_index] < where_value
+                        where_function = (
+                            lambda row: row[where_column_index] < where_value
+                        )
                     else:
                         raise Exception(f"Unsupported operator: {where_operator}")
                 delete_count = self.dml_manager.delete(table_name, where_function)
                 print(f"Deleted {delete_count} rows from table {table_name}.")
 
             elif command == "UPDATE":
-              
+
                 table_name = parsed_query["table"]
 
-                
                 updates = {}
                 for update_item in parsed_query["updates"]:
                     col = update_item["col"]
                     val = update_item["val"]
-                   
+
                     if isinstance(val, str):
                         if val.isdigit():
                             val = int(val)
@@ -452,21 +460,28 @@ class QueryManager:
                     where_column_index = column_names.index(column_name)
 
                     if where_operator == "=":
-                        where_function = lambda row: row[where_column_index] == where_value
+                        where_function = (
+                            lambda row: row[where_column_index] == where_value
+                        )
                     elif where_operator == ">":
-                        where_function = lambda row: row[where_column_index] > where_value
+                        where_function = (
+                            lambda row: row[where_column_index] > where_value
+                        )
                     elif where_operator == "<":
-                        where_function = lambda row: row[where_column_index] < where_value
+                        where_function = (
+                            lambda row: row[where_column_index] < where_value
+                        )
                     else:
                         raise Exception(f"Unsupported operator: {where_operator}")
-                    
-                update_count = self.dml_manager.update(table_name, updates, where_function)
+
+                update_count = self.dml_manager.update(
+                    table_name, updates, where_function
+                )
                 print(f"Updated {update_count} rows in table {table_name}.")
 
             else:
                 raise Exception("Unsupported SQL command")
 
-            
 
 if __name__ == "__main__":
 

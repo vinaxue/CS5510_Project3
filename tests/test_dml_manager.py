@@ -100,7 +100,7 @@ class TestDMLManager(unittest.TestCase):
         self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
 
         # Select users with id > 1
-        results = self.dml_manager.select("users", where=lambda row: row[0] > 1)
+        results = self.dml_manager.select("users", where=["id", ">", 1])
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], 2)
 
@@ -162,8 +162,8 @@ class TestDMLManager(unittest.TestCase):
         """Test that update operation updates the index"""
         self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
         self.dml_manager.update("users", {"id": 10})
-        self.assertNotIn(1, self.storage.index["users"]["id"])
-        self.assertIn(10, self.storage.index["users"]["id"])
+        self.assertNotIn(1, self.storage.index["users"]["id"]["tree"])
+        self.assertIn(10, self.storage.index["users"]["id"]["tree"])
 
     ########################## JOIN TESTS ##########################
     def test_select_join_with_index(self):
