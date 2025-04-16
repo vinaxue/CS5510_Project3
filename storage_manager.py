@@ -1,5 +1,6 @@
 import os
 import pickle
+import shutil
 import sys
 from BTrees.OOBTree import OOBTree
 
@@ -9,10 +10,10 @@ class StorageManager:
 
     # TODO: handle SORT BY (probably will be in optimizer later)
 
-    def __init__(self, db_file="./data/database.dat", index_file="./data/index.db"):
+    def __init__(self, db_file="./data/database.pkl", index_file="./data/index.pkl"):
         # print(sys.getrecursionlimit())
 
-        max_rec = 100000
+        max_rec = 10000
         sys.setrecursionlimit(max_rec)
 
         os.makedirs(os.path.dirname(db_file), exist_ok=True)
@@ -41,8 +42,12 @@ class StorageManager:
 
     def save_index(self):
         """Saves the current B-Tree index to disk"""
-        with open(self.index_file, "wb") as f:
+        tmp_file = self.index_file + ".tmp"
+        os.makedirs(os.path.dirname(tmp_file), exist_ok=True)
+
+        with open(tmp_file, "wb") as f:
             pickle.dump(self.index, f)
+        shutil.move(tmp_file, self.index_file)
 
     def load_db(self):
         """Loads the database file"""
