@@ -1,11 +1,12 @@
 from ddl_manager import DDLManager
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dml_manager import DMLManager
 from query_manager import QueryManager
 from storage_manager import StorageManager
 import uvicorn
+
 
 storage_manager = StorageManager(
     db_file="./data/sample_data.pkl", index_file="./data/sample_index.pkl"
@@ -32,7 +33,7 @@ class QueryRequest(BaseModel):
 @app.post("/query")
 async def execute_query(data: QueryRequest):
     try:
-        query = query_manager.execute_query(data.query)
-        return {"result": query}
+        res, runtime = query_manager.execute_query(data.query)
+        return {"result": res, "runtime": runtime}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

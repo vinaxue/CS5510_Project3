@@ -14,7 +14,7 @@ def track_time(func):
         execution_time = end_time - start_time
         print(f"Query '{func.__name__}' executed in {execution_time:.6f} seconds")
 
-        return result
+        return result, execution_time
 
     return wrapper
 

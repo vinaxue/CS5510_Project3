@@ -117,7 +117,7 @@ class TestQueryManager(unittest.TestCase):
             db["FOREIGN_KEYS"]["Orders"],
             {"UserID": {"referenced_table": "Users", "referenced_column": "UserID"}},
         )
-  
+
     ############################ INSERT ##########################
     def test_execute_insert_query(self):
         self.setup_table_users()
@@ -172,7 +172,6 @@ class TestQueryManager(unittest.TestCase):
         db = self.storage.load_db()
         index = self.storage.load_index()
 
-
         query = "INSERT INTO Orders (OrderID, OrderDate, Amount, UserID) VALUES (1, '2023-10-01', 100.0, 1)"
         self.query_manager.execute_query(query)
 
@@ -188,8 +187,8 @@ class TestQueryManager(unittest.TestCase):
         print(index["Orders"])
         self.assertIn("Orders", index)
         self.assertIn("OrderID", index["Orders"])
-        self.assertIn(1, index["Orders"]["OrderID"]['tree'])
-        self.assertEqual(index["Orders"]["OrderID"]['tree'][1], [0])
+        self.assertIn(1, index["Orders"]["OrderID"]["tree"])
+        self.assertEqual(index["Orders"]["OrderID"]["tree"][1], [0])
 
     ############################# CREATE INDEX ##########################
     def test_execute_create_index_query(self):
@@ -210,10 +209,12 @@ class TestQueryManager(unittest.TestCase):
         self.setup_table_users()
         self.insert_user(1, "Alice", "alice@example.com")
 
-        query = "SELECT UserName FROM Users WHERE UserID = 1"
+        query = "SELECT * FROM Users"
         result = self.query_manager.execute_query(query)
 
-        self.assertEqual(result, [{"UserName": "Alice"}])
+        self.assertEqual(
+            result, [{"UserID": 1, "UserName": "Alice", "Email": "alice@example.com"}]
+        )
 
     def test_execute_select_query_with_condition(self):
         self.setup_table_users()
@@ -267,12 +268,10 @@ class TestQueryManager(unittest.TestCase):
 
         db = self.storage.load_db()
         index = self.storage.load_index()
-      
-        
+
         query = "CREATE INDEX idx_UserName ON Users(UserName)"
         self.query_manager.execute_query(query)
-        
-     
+
         query = "UPDATE Users SET UserName = 'Alice Smith' WHERE UserID = 1"
         self.query_manager.execute_query(query)
         db = self.storage.load_db()
@@ -283,8 +282,8 @@ class TestQueryManager(unittest.TestCase):
         self.assertEqual(
             db["DATA"]["Users"][0], [1, "Alice Smith", "alice@example.com"]
         )
-        self.assertIn("Alice Smith", index["Users"]["UserName"]['tree'])
-        self.assertEqual(index["Users"]["UserName"]['tree']["Alice Smith"], [0])
+        self.assertIn("Alice Smith", index["Users"]["UserName"]["tree"])
+        self.assertEqual(index["Users"]["UserName"]["tree"]["Alice Smith"], [0])
 
     ############################## DELETE ##########################
     def test_execute_delete_query(self):

@@ -20,6 +20,7 @@ from pyparsing import (
 from ddl_manager import DDLManager
 from dml_manager import DMLManager
 from storage_manager import StorageManager
+from utils import track_time
 
 
 class QueryManager:
@@ -301,6 +302,7 @@ class QueryManager:
         cond_tokens = where_parse[1:]  # 去掉 'WHERE'
         return self._build_condition_fn(cond_tokens)
 
+    @track_time
     def execute_query(self, query: str):
         """
         Execute the parsed query.
@@ -370,15 +372,17 @@ class QueryManager:
                 self.dml_manager.insert(table_name, values)
 
             elif command == "SELECT":
-                selected_columns = parsed_query[1]
+                selected_columns = parsed_query[1] if parsed_query[1] != "*" else None
                 from_clause = parsed_query[3]
 
                 table_name = from_clause[0]
                 where_function = None
 
+                where_flag = False
                 # Process WHERE conditions, if any
                 where_condition = parsed_query[4] if len(parsed_query) > 4 else None
                 if where_condition:
+                    where_flag = True
                     where_column = where_condition[1]
                     where_operator = where_condition[2]
                     where_value = (
@@ -436,7 +440,11 @@ class QueryManager:
                     results = self.dml_manager.select(
                         table_name=table_name,
                         columns=selected_columns,
-                        where=[where_column, where_operator, where_value],
+                        where=(
+                            [where_column, where_operator, where_value]
+                            if where_flag
+                            else None
+                        ),
                     )
                 return results
 

@@ -222,7 +222,6 @@ class DMLManager:
                 else:
                     results.append(row)
             return results
-
         groups = defaultdict(list)
         for row in filtered_rows:
             key = tuple(row[col] for col in group_by)
