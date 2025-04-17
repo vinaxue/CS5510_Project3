@@ -97,14 +97,11 @@ class QueryManager:
 
         # Allow chaining of simple_condition via AND/OR recursively
         self.condition <<= self.simple_condition + ZeroOrMore(
-            (CaselessKeyword("AND") | CaselessKeyword("OR"))("logic")
-            + self.condition
+            (CaselessKeyword("AND") | CaselessKeyword("OR"))("logic") + self.condition
         )
 
         # Combine the WHERE keyword with the full recursive condition
-        self.where_condition = Group(
-            self.WHERE + self.condition
-        )("where")
+        self.where_condition = Group(self.WHERE + self.condition)("where")
         # --- Multi-condition WHERE support ends ---
 
         self.group_by_clause = Group(self.GROUP + self.BY + self.column_list)
@@ -277,7 +274,7 @@ class QueryManager:
         idx = 1
         while idx < len(tokens):
             logic = tokens[idx].upper()
-            sub = tokens[idx+1]
+            sub = tokens[idx + 1]
             ops.append(logic)
             # 递归
             funcs.append(self._build_condition_fn(sub))
@@ -303,6 +300,7 @@ class QueryManager:
         """
         cond_tokens = where_parse[1:]  # 去掉 'WHERE'
         return self._build_condition_fn(cond_tokens)
+
     def execute_query(self, query: str):
         """
         Execute the parsed query.
@@ -559,15 +557,15 @@ class QueryManager:
 
 if __name__ == "__main__":
 
-    stor_mgr = StorageManager()  
-    ddl_mgr = DDLManager(stor_mgr) 
+    stor_mgr = StorageManager()
+    ddl_mgr = DDLManager(stor_mgr)
     dml_mgr = DMLManager(stor_mgr)
 
-    
     qm = QueryManager(stor_mgr, ddl_mgr, dml_mgr)
 
     multi_query = """
     SELECT * FROM employees WHERE age >= 30 AND salary < 5000 OR department = 'Sales';
+    SELECT * FROM employees ORDER BY name;
     """
 
     try:

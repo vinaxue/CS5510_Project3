@@ -7,7 +7,9 @@ from query_manager import QueryManager
 from storage_manager import StorageManager
 import uvicorn
 
-storage_manager = StorageManager()
+storage_manager = StorageManager(
+    db_file="./data/sample_data.pkl", index_file="./data/sample_index.pkl"
+)
 ddl_manager = DDLManager(storage_manager)
 dml_manager = DMLManager(storage_manager)
 query_manager = QueryManager(storage_manager, ddl_manager, dml_manager)

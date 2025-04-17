@@ -4,7 +4,7 @@
 
 1. BTrees
 2. pyparsing
-3. fastapi, uvicorn \*needs approval
+3. fastapi, uvicorn \*for interface only
 
 ### Supported features:
 
@@ -20,28 +20,38 @@
      - primary key and foreign key support
      - default index on the primary key
   2. DROP TABLE
-     - allow drop if any columns of the table is referenced through foreign key
+     - allow drop if any columns of the table is not referenced through foreign key
   3. CREATE INDEX
   4. DROP INDEX
 
 - DML
   1. INSERT
   2. SELECT
-     1. JOIN (only two tables)
-     2. Conditions (only 1 for now)
-        - '='
-        - '>'
-        - '<'
-     3. Aggregation (GROUP BY)
-        - MIN
-        - MAX
-        - SUM
+     - JOIN (only two tables)
+       - support join with self
+       - cannot rename tables
+     - Aggregation (GROUP BY)
+       - MIN
+       - MAX
+       - SUM
+     - Support conditions
   3. DELETE
+     - Support conditions
   4. UPDATE
+     - Support conditions
+  5. Conditions (supports one or two joined by AND or OR)
+     - '='
+     - '>'
+     - '<'
 
 ### Run unit tests:
 
-`python -m unittest ./tests/{filename}.py`
+`python -m unittest ./tests/{filename}.py` for entire test suite or `python -m unittest test.{filename}.{classname}.{testname}` for individual test
+
+Ex:
+
+- `python -m unittest ./tests/test_ddl_manager.py`
+- `python -m unittest test.test_ddl_manager.DDLManagerTest.test_create_table`
 
 ### Start interfact:
 

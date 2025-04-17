@@ -22,3 +22,7 @@ def track_time(func):
 STRING = "string"
 INT = "int"
 DOUBLE = "double"
+
+MAX = "max"
+MIN = "min"
+SUM = "sum"

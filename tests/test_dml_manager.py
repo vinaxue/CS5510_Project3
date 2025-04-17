@@ -3,7 +3,7 @@ import unittest
 from storage_manager import StorageManager
 from ddl_manager import DDLManager
 from dml_manager import DMLManager
-from utils import DOUBLE, INT, STRING
+from utils import DOUBLE, INT, MAX, MIN, STRING, SUM
 
 
 class TestDMLManager(unittest.TestCase):
@@ -137,6 +137,63 @@ class TestDMLManager(unittest.TestCase):
         self.assertIn(2, ids)
         self.assertIn("Alice", names)
         self.assertIn("Bob", names)
+
+    def test_select_with_group_by_min(self):
+        """Test selecting with group by"""
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("orders", [102, 1, 49.99])
+        self.dml_manager.insert("orders", [103, 2, 29.99])
+
+        results = self.dml_manager.select(
+            "orders",
+            columns=["user_id", "amount"],
+            group_by=["user_id"],
+            aggregates={MIN: "amount"},
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["user_id"], 1)
+        self.assertEqual(results[0]["amount"], 49.99)
+        self.assertEqual(results[1]["user_id"], 2)
+        self.assertEqual(results[1]["amount"], 29.99)
+
+    def test_select_with_group_by_max(self):
+        """Test selecting with group by"""
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("orders", [102, 1, 49.99])
+        self.dml_manager.insert("orders", [103, 2, 29.99])
+
+        results = self.dml_manager.select(
+            "orders",
+            columns=["user_id", "amount"],
+            group_by=["user_id"],
+            aggregates={MAX: "amount"},
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["user_id"], 1)
+        self.assertEqual(results[0]["amount"], 99.99)
+        self.assertEqual(results[1]["user_id"], 2)
+        self.assertEqual(results[1]["amount"], 29.99)
+
+    def test_select_with_group_by_sum(self):
+        """Test selecting with group by"""
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("orders", [102, 1, 49.99])
+        self.dml_manager.insert("orders", [103, 2, 29.99])
+
+        results = self.dml_manager.select(
+            "orders",
+            columns=["user_id", "amount"],
+            group_by=["user_id"],
+            aggregates={SUM: "amount"},
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["user_id"], 1)
+        self.assertEqual(results[0]["amount"], (99.99 + 49.99))
+        self.assertEqual(results[1]["user_id"], 2)
+        self.assertEqual(results[1]["amount"], 29.99)
 
     ########################## DELETE TESTS ##########################
     def test_delete_all_rows(self):
@@ -291,11 +348,11 @@ class TestDMLManager(unittest.TestCase):
         )
 
         self.assertEqual(len(results), 3)
-        self.assertIn(results, {"employees_L.name": "Alice", "employees_R.name": "Bob"})
+        self.assertIn({"employees_L.name": "Alice", "employees_R.name": "Bob"}, results)
         self.assertIn(
-            results, {"employees_L.name": "Bob", "employees_R.name": "Charlie"}
+            {"employees_L.name": "Bob", "employees_R.name": "Charlie"}, results
         )
-        self.assertIn(results, {"employees_L.name": "Bob", "employees_R.name": "David"})
+        self.assertIn({"employees_L.name": "Bob", "employees_R.name": "David"}, results)
 
 
 if __name__ == "__main__":

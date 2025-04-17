@@ -1,7 +1,7 @@
 from collections import defaultdict
 from BTrees.OOBTree import OOBTree
 
-from utils import DOUBLE, INT, STRING
+from utils import DOUBLE, INT, MAX, MIN, STRING, SUM
 
 
 class DMLManager:
@@ -194,12 +194,8 @@ class DMLManager:
                 return v != val
             if op == "<":
                 return v < val
-            if op == "<=":
-                return v <= val
             if op == ">":
                 return v > val
-            if op == ">=":
-                return v >= val
             return False
 
         def match(row):
@@ -235,16 +231,16 @@ class DMLManager:
         for group_key, group_rows in groups.items():
             result_row = {col: group_key[i] for i, col in enumerate(group_by)}
 
-            for col, agg_func in aggregates.items():
+            for agg_func, col in aggregates.items():
                 values = [r[col] for r in group_rows if r[col] is not None]
 
                 if not values:
                     result_row[col] = None
-                elif agg_func == "MAX":
+                elif agg_func == MAX:
                     result_row[col] = max(values)
-                elif agg_func == "MIN":
+                elif agg_func == MIN:
                     result_row[col] = min(values)
-                elif agg_func == "SUM":
+                elif agg_func == SUM:
                     result_row[col] = sum(values)
                 else:
                     raise ValueError(f"Unsupported aggregate: {agg_func}")

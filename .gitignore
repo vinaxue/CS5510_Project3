@@ -175,3 +175,4 @@ cython_debug/
 database.dat
 index.db
 .vscode/settings.json
+data/database.pkl
