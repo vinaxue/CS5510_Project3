@@ -253,7 +253,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(1, "2023-10-01", 100.0, 1)
         self.insert_order(2, "2023-10-02", 200.0, 2)
 
-        query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID WHERE Users.UserID < 2"
+        query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID WHERE Users.UserID < 2 and Orders.OrderID = 1"
         result = self.query_manager.execute_query(query)
 
         self.assertEqual(

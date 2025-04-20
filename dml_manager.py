@@ -400,7 +400,7 @@ class DMLManager:
         self.storage_manager.save_index()
 
         return update_count
-
+    
     def select_join_with_index(
         self,
         left_table,
@@ -413,90 +413,111 @@ class DMLManager:
         right_alias=None,
     ):
         """
-        Optimized SELECT JOIN based on an equality condition using an index or a hash table.
-
-        :param left_table: Name of the left table.
-        :param right_table: Name of the right table.
-        :param left_join_col: Column name in the left table used for joining.
-        :param right_join_col: Column name in the right table used for joining.
-        :param columns: List of columns to return in the format "Alias.Column". If None, returns all columns from both tables.
-        :param where: A callable that accepts a joined row (dict) and returns True if the row meets the filter condition.
-                    If None, no additional filtering is applied.
-        :param left_alias: Optional alias for the left table. If not provided and a self join occurs, a default alias is used.
-        :param right_alias: Optional alias for the right table. If not provided and a self join occurs, a default alias is used.
-        :return: A list of dictionaries representing the joined rows.
+        Optimized SELECT JOIN: always iterate the smaller table, build index/hash on the larger.
+        Supports where as None, list, dict, or callable(row_dict)->bool.
         """
-        # Reload the latest database and index
         self.reload()
 
-        # Validate that both tables exist
         if left_table not in self.db["TABLES"] or right_table not in self.db["TABLES"]:
             raise ValueError("One or both tables do not exist.")
 
-        # If aliases are not provided, and this is a self-join, assign default aliases to differentiate the two sides.
         if left_alias is None or right_alias is None:
             if left_table == right_table:
                 left_alias = f"{left_table}_L"
                 right_alias = f"{right_table}_R"
             else:
-                left_alias = left_table
-                right_alias = right_table
+                left_alias, right_alias = left_table, right_table
 
-        # Retrieve column definitions and data for both tables.
-        left_columns_dict = self.db["COLUMNS"][left_table]
-        right_columns_dict = self.db["COLUMNS"][right_table]
-        left_data = self.db["DATA"][left_table]
-        right_data = self.db["DATA"][right_table]
 
-        left_columns_list = list(left_columns_dict.keys())
-        right_columns_list = list(right_columns_dict.keys())
+        Lcols = list(self.db["COLUMNS"][left_table].keys())
+        Rcols = list(self.db["COLUMNS"][right_table].keys())
+        Ldata = self.db["DATA"][left_table]
+        Rdata = self.db["DATA"][right_table]
 
-        # Get the index positions for the join columns in both tables.
+  
         try:
-            left_col_idx = left_columns_list.index(left_join_col)
-            right_col_idx = right_columns_list.index(right_join_col)
+            Li = Lcols.index(left_join_col)
+            Ri = Rcols.index(right_join_col)
         except ValueError:
-            raise ValueError(
-                f"Join column {left_join_col} or {right_join_col} not found."
+            raise ValueError(f"Join column {left_join_col} or {right_join_col} not found.")
+
+
+        if len(Ldata) <= len(Rdata):
+            outer_data, outer_cols, outer_alias, outer_idx = Ldata, Lcols, left_alias, Li
+            inner_table, inner_data, inner_cols, inner_alias, inner_idx = (
+                right_table, Rdata, Rcols, right_alias, Ri
+            )
+        else:
+            outer_data, outer_cols, outer_alias, outer_idx = Rdata, Rcols, right_alias, Ri
+            inner_table, inner_data, inner_cols, inner_alias, inner_idx = (
+                left_table, Ldata, Lcols, left_alias, Li
             )
 
-        # Use the index on the right table if available to optimize the join.
-        if right_table in self.index and right_join_col in self.index[right_table]:
-            right_index = self.index[right_table][right_join_col]
-            right_index_dict = {}
-            for key in right_index:
-                row_id_list = right_index[key]
-                # For each key, create a list of tuples: (row_id, corresponding row data)
-                right_index_dict[key] = [(rid, right_data[rid]) for rid in row_id_list]
-        else:
-            # If no index exists, build a hash table using the right join column.
-            right_index_dict = {}
-            for row_id, row in enumerate(right_data):
-                key = row[right_col_idx]
-                right_index_dict.setdefault(key, []).append((row_id, row))
+ 
+        if inner_table in self.index and (
+            (inner_table == right_table and right_join_col in self.index[inner_table]) or
+            (inner_table == left_table and left_join_col in self.index[inner_table])
+        ):
 
-        joined_results = []
-        # Loop through each row in the left table.
-        for left_row in left_data:
-            join_value = left_row[left_col_idx]
-            # Check if there are matching rows in the right table via the hash table or index.
-            if join_value in right_index_dict:
-                for _, right_row in right_index_dict[join_value]:
-                    joined_row = {}
-                    # Build the left part of the joined row using the left table alias.
-                    for idx, col in enumerate(left_columns_list):
-                        joined_row[f"{left_alias}.{col}"] = left_row[idx]
-                    # Build the right part of the joined row using the right table alias.
-                    for idx, col in enumerate(right_columns_list):
-                        joined_row[f"{right_alias}.{col}"] = right_row[idx]
-                    # Apply the where-filter if provided.
-                    if where is None or where(joined_row):
-                        if columns is None:
-                            joined_results.append(joined_row)
-                        else:
-                            filtered_row = {}
-                            for c in columns:
-                                if c in joined_row:
-                                    filtered_row[c] = joined_row[c]
-                            joined_results.append(filtered_row)
-        return joined_results
+            idx_col = right_join_col if inner_table == right_table else left_join_col
+            btree = self.index[inner_table][idx_col]["tree"]
+            inner_index = {key: [inner_data[rid] for rid in btree[key]] for key in btree}
+        else:
+            inner_index = {}
+            for row in inner_data:
+                key = row[inner_idx]
+                inner_index.setdefault(key, []).append(row)
+
+        def eval_cond(cond, row):
+            c, op, v = cond
+            val = row.get(c)
+            if op == "=":   return val == v
+            if op == "!=":  return val != v
+            if op == "<":   return val < v
+            if op == ">":   return val > v
+            if op == "<=":  return val <= v
+            if op == ">=":  return val >= v
+            raise ValueError(f"Unsupported operator '{op}'")
+
+        if callable(where):
+            match_fn = where
+        elif where is None:
+            match_fn = lambda row: True
+        elif isinstance(where, list):
+            match_fn = lambda row: eval_cond(where, row)
+        else:  # dict AND/OR
+            op = where["op"]
+            if op == "AND":
+                match_fn = lambda row: eval_cond(where["left"], row) and eval_cond(where["right"], row)
+            else:
+                match_fn = lambda row: eval_cond(where["left"], row) or eval_cond(where["right"], row)
+
+
+        results = []
+        for o_row in outer_data:
+            key = o_row[outer_idx]
+            if key not in inner_index:
+                continue
+            for i_row in inner_index[key]:
+
+                j = {}
+                for i, col in enumerate(outer_cols):
+                    j[f"{outer_alias}.{col}"] = o_row[i]
+                    j[col] = o_row[i]
+                for i, col in enumerate(inner_cols):
+                    j[f"{inner_alias}.{col}"] = i_row[i]
+                    j[col] = i_row[i]
+               
+                if not match_fn(j):
+                    continue
+           
+                if columns is None:
+                    results.append(j)
+                else:
+                    row_out = {}
+                    for c in columns:
+                        if c in j:
+                            row_out[c] = j[c]
+                    results.append(row_out)
+
+        return results
