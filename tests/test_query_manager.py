@@ -184,7 +184,7 @@ class TestQueryManager(unittest.TestCase):
             db["DATA"]["Orders"][0],
             [1, "2023-10-01", 100.0, 1],
         )
-        print(index["Orders"])
+        # print(index["Orders"])
         self.assertIn("Orders", index)
         self.assertIn("OrderID", index["Orders"])
         self.assertIn(1, index["Orders"]["OrderID"]["tree"])
@@ -322,7 +322,7 @@ class TestQueryManager(unittest.TestCase):
         db = self.storage.load_db()
         index = self.storage.load_index()
 
-        print(index["Users"])
+        # print(index["Users"])
         self.assertEqual(db["DATA"]["Users"][0][1], "Alice Smith")
         self.assertEqual(
             db["DATA"]["Users"][0], [1, "Alice Smith", "alice@example.com"]
@@ -348,7 +348,7 @@ class TestQueryManager(unittest.TestCase):
 
         db = self.storage.load_db()
         index = self.storage.load_index()
-        print(db["DATA"]["Users"])
+        # print(db["DATA"]["Users"])
         self.assertEqual(len(db["DATA"]["Users"]), 2)
         self.assertNotIn(1, index["Users"]["UserID"])
         self.assertNotIn("Alice Smith", index["Users"]["UserName"])
@@ -372,18 +372,8 @@ class TestQueryManager(unittest.TestCase):
     def test_execute_drop_table_query(self):
         db = self.storage.load_db()
 
-        if "Orders" not in db["TABLES"]:
-            self.ddl_manager.create_table(
-                "Orders",
-                [
-                    ("OrderID", INT),
-                    ("OrderDate", STRING),
-                    ("Amount", DOUBLE),
-                    ("UserID", INT),
-                ],
-                primary_key="OrderID",
-                foreign_keys=[("UserID", "Users", "UserID")],
-            )
+        self.setup_table_users()
+        self.setup_table_orders()
 
         db = self.storage.load_db()
         index = self.storage.load_index()

@@ -24,6 +24,7 @@ from utils import track_time
 import time
 from functools import wraps
 
+
 def track_time(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -32,7 +33,9 @@ def track_time(func):
         elapsed = (time.time() - start) * 1000
         print(f"{func.__name__} executed in {elapsed:.2f} ms")
         return result
+
     return wrapper
+
 
 class QueryManager:
     def __init__(self, storage_manager, ddl_manager, dml_manager):
@@ -50,7 +53,9 @@ class QueryManager:
         # self.numeric_literal = Combine(Optional(oneOf("+ -")) + integer)
         self.string_literal = quotedString.setParseAction(removeQuotes)
         self.constant = self.numeric_literal | self.string_literal
-        self.numeric_literal.setParseAction(lambda t: int(t[0]) if t[0].isdigit() else float(t[0]))
+        self.numeric_literal.setParseAction(
+            lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
+        )
 
         (
             self.SELECT,
@@ -256,6 +261,7 @@ class QueryManager:
         return results
 
     def _build_condition_fn(self, tokens):
+        # print(tokens)
         """
         Recursively build a filter function f(row_dict)->bool from tokens,
         where tokens is either:
@@ -285,17 +291,83 @@ class QueryManager:
 
         # Build the first (innermost) comparison function
         if op == "=":
-            funcs = [lambda row, c=col, v=val: row.get(c) == v]
+            funcs = [
+                lambda row, c=col, v=val: (
+                    float(row.get(c)) == v
+                    if isinstance(row.get(c), (int, float))
+                    and isinstance(v, (int, float))
+                    else (
+                        row.get(c) == v
+                        if isinstance(row.get(c), str) and isinstance(v, str)
+                        else False
+                    )
+                )
+            ]
         elif op == "!=":
-            funcs = [lambda row, c=col, v=val: row.get(c) != v]
+            funcs = [
+                lambda row, c=col, v=val: (
+                    float(row.get(c)) != v
+                    if isinstance(row.get(c), (int, float))
+                    and isinstance(v, (int, float))
+                    else (
+                        row.get(c) != v
+                        if isinstance(row.get(c), str) and isinstance(v, str)
+                        else False
+                    )
+                )
+            ]
         elif op == "<":
-            funcs = [lambda row, c=col, v=val: row.get(c) < v]
+            funcs = [
+                lambda row, c=col, v=val: (
+                    float(row.get(c)) < v
+                    if isinstance(row.get(c), (int, float))
+                    and isinstance(v, (int, float))
+                    else (
+                        row.get(c) < v
+                        if isinstance(row.get(c), str) and isinstance(v, str)
+                        else False
+                    )
+                )
+            ]
         elif op == ">":
-            funcs = [lambda row, c=col, v=val: row.get(c) > v]
+            funcs = [
+                lambda row, c=col, v=val: (
+                    float(row.get(c)) > v
+                    if isinstance(row.get(c), (int, float))
+                    and isinstance(v, (int, float))
+                    else (
+                        row.get(c) > v
+                        if isinstance(row.get(c), str) and isinstance(v, str)
+                        else False
+                    )
+                )
+            ]
         elif op == "<=":
-            funcs = [lambda row, c=col, v=val: row.get(c) <= v]
+            funcs = [
+                lambda row, c=col, v=val: (
+                    float(row.get(c)) <= v
+                    if isinstance(row.get(c), (int, float))
+                    and isinstance(v, (int, float))
+                    else (
+                        row.get(c) <= v
+                        if isinstance(row.get(c), str) and isinstance(v, str)
+                        else False
+                    )
+                )
+            ]
         elif op == ">=":
-            funcs = [lambda row, c=col, v=val: row.get(c) >= v]
+            funcs = [
+                lambda row, c=col, v=val: (
+                    float(row.get(c)) >= v
+                    if isinstance(row.get(c), (int, float))
+                    and isinstance(v, (int, float))
+                    else (
+                        row.get(c) >= v
+                        if isinstance(row.get(c), str) and isinstance(v, str)
+                        else False
+                    )
+                )
+            ]
         else:
             raise Exception(f"Unsupported operator: {op}")
 
@@ -320,15 +392,13 @@ class QueryManager:
             return res
 
         return where_fn
- 
+
     def _build_where_fn(self, where_parse):
-       
-        cond_tokens = where_parse[1:] 
+        cond_tokens = where_parse[1:]
         return self._build_condition_fn(cond_tokens)
 
     @track_time
     def execute_query(self, query: str):
-   
         """
         Execute a SQL statement. Supports:
         - CREATE TABLE / CREATE INDEX
@@ -343,7 +413,7 @@ class QueryManager:
 
         for parsed in parsed_queries:
             cmd = parsed[0].upper()
-            where_tok    = parsed.get("where")
+            where_tok = parsed.get("where")
             base_where_fn = self._build_where_fn(where_tok) if where_tok else None
             # ----- CREATE -----
             if cmd == "CREATE":
@@ -360,7 +430,9 @@ class QueryManager:
                         constraints = col[2] if len(col) > 2 else []
                         if "PRIMARY KEY" in " ".join(constraints):
                             pk = name
-                        if any("FOREIGN" in c for c in constraints) and any("KEY" in c for c in constraints):
+                        if any("FOREIGN" in c for c in constraints) and any(
+                            "KEY" in c for c in constraints
+                        ):
                             ref_table = constraints[3]
                             ref_col = constraints[4]
                             fks.append((name, ref_table, ref_col))
@@ -395,7 +467,7 @@ class QueryManager:
                 for v in raw_vals:
                     if isinstance(v, str) and v.isdigit():
                         vals.append(int(v))
-                    elif isinstance(v, str) and v.replace(".","",1).isdigit():
+                    elif isinstance(v, str) and v.replace(".", "", 1).isdigit():
                         vals.append(float(v))
                     else:
                         vals.append(v)
@@ -438,12 +510,14 @@ class QueryManager:
             # ----- DELETE -----
             if cmd == "DELETE":
                 tbl = parsed["table"]
-                where_parse = parsed.get("where")    
-                base_where_fn = self._build_where_fn(where_parse) if where_parse else None
+                where_parse = parsed.get("where")
+                base_where_fn = (
+                    self._build_where_fn(where_parse) if where_parse else None
+                )
                 deleted_count = self.dml_manager.delete(tbl, base_where_fn)
                 print(f"Deleted {deleted_count} rows from {tbl}.")
                 return deleted_count
-            
+
             # ----- UPDATE -----
             if cmd == "UPDATE":
                 tbl = parsed.get("table")
@@ -453,7 +527,7 @@ class QueryManager:
                     c, v = u["col"], u["val"]
                     if isinstance(v, str) and v.isdigit():
                         v = int(v)
-                    elif isinstance(v, str) and v.replace(".","",1).isdigit():
+                    elif isinstance(v, str) and v.replace(".", "", 1).isdigit():
                         v = float(v)
                     updates[c] = v
                 # Build where function if present
@@ -493,14 +567,24 @@ if __name__ == "__main__":
     class QueryManagerTest:
         def __init__(self):
             self.identifier = Word(alphas, alphanums + "_")
-            self.qualified_identifier = Combine(self.identifier + ZeroOrMore("." + self.identifier))
+            self.qualified_identifier = Combine(
+                self.identifier + ZeroOrMore("." + self.identifier)
+            )
             integer = Word(nums)
-            float_literal = Combine(Optional(oneOf("+ -")) + Word(nums) + "." + Word(nums))
-            self.numeric_literal = float_literal | Combine(Optional(oneOf("+ -")) + integer)
+            float_literal = Combine(
+                Optional(oneOf("+ -")) + Word(nums) + "." + Word(nums)
+            )
+            self.numeric_literal = float_literal | Combine(
+                Optional(oneOf("+ -")) + integer
+            )
             self.string_literal = quotedString.setParseAction(removeQuotes)
             self.constant = self.numeric_literal | self.string_literal
-            self.numeric_literal.setParseAction(lambda t: int(t[0]) if t[0].isdigit() else float(t[0]))
-            self.SELECT, self.FROM, self.WHERE = map(CaselessKeyword, "SELECT FROM WHERE".split())
+            self.numeric_literal.setParseAction(
+                lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
+            )
+            self.SELECT, self.FROM, self.WHERE = map(
+                CaselessKeyword, "SELECT FROM WHERE".split()
+            )
 
             self.simple_condition = Group(
                 self.qualified_identifier("left")
@@ -509,13 +593,18 @@ if __name__ == "__main__":
             )
             self.condition = Forward()
             self.condition <<= self.simple_condition + ZeroOrMore(
-                (CaselessKeyword("AND") | CaselessKeyword("OR"))("logic") + self.condition
+                (CaselessKeyword("AND") | CaselessKeyword("OR"))("logic")
+                + self.condition
             )
             self.where_condition = Group(self.WHERE + self.condition)("where")
 
             self.select_stmt = Forward()
             self.select_stmt <<= (
-                self.SELECT + "*" + self.FROM + self.identifier("table") + Optional(self.where_condition)
+                self.SELECT
+                + "*"
+                + self.FROM
+                + self.identifier("table")
+                + Optional(self.where_condition)
             )
             self.sql_stmt = self.select_stmt
 
@@ -524,13 +613,13 @@ if __name__ == "__main__":
 
     qm = QueryManagerTest()
     tests = [
-    ("unquoted 1",    "SELECT * FROM t WHERE col = 1"),
-    ("quoted '1'",   "SELECT * FROM t WHERE col = '1'")
+        ("unquoted 1", "SELECT * FROM t WHERE col = 1"),
+        ("quoted '1'", "SELECT * FROM t WHERE col = '1'"),
     ]
 
     for desc, sql in tests:
         parsed = qm.parse_query(sql)[0]
         where = parsed.get("where")
-        cond = where[1]          
-        literal = cond[2]        
+        cond = where[1]
+        literal = cond[2]
         print(f"{desc}: literal={literal!r}, type={type(literal).__name__}")
