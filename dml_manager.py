@@ -407,22 +407,18 @@ class DMLManager:
                 Li,
             )
 
-        if inner_table in self.index and (
-            (inner_table == right_table and right_join_col in self.index[inner_table])
-            or (inner_table == left_table and left_join_col in self.index[inner_table])
-        ):
-
-            idx_col = right_join_col if inner_table == right_table else left_join_col
+        idx_col = right_join_col if inner_table == right_table else left_join_col
+        if inner_table in self.index and idx_col in self.index[inner_table]:
             btree = self.index[inner_table][idx_col]["tree"]
             inner_index = {
-                key: [inner_data[rid] for rid in btree[key]] for key in btree
+                key: [inner_data[rid] for rid in btree[key]]
+                for key in btree
             }
         else:
             inner_index = {}
             for row in inner_data:
                 key = row[inner_idx]
                 inner_index.setdefault(key, []).append(row)
-
         if callable(where):
             match_fn = where
         else:
