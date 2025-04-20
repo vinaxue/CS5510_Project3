@@ -21,7 +21,20 @@ from ddl_manager import DDLManager
 from dml_manager import DMLManager
 from storage_manager import StorageManager
 from utils import track_time
+import time
+from functools import wraps
 
+def track_time(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        # 调用原函数，拿到真正的返回结果
+        result = func(*args, **kwargs)
+        elapsed = (time.time() - start) * 1000
+        print(f"{func.__name__} executed in {elapsed:.2f} ms")
+        # 只返回原来的结果，不打包成 (result, elapsed)
+        return result
+    return wrapper
 
 class QueryManager:
     def __init__(self, storage_manager, ddl_manager, dml_manager):
@@ -245,14 +258,24 @@ class QueryManager:
 
     def _build_condition_fn(self, tokens):
         """
-        递归地把 tokens（ParseResults 或列表）转成一个 Python 函数 f(row)->bool。
-        tokens 的格式是 [simple_cond, ('AND'|'OR'), subcond, ...]，
-        simple_cond 本身是一个三元列表 [col, op, val]。
+        Recursively build a filter function f(row_dict)->bool from tokens,
+        where tokens is either:
+          - ['col', 'op', val]        (simple condition)
+          - [simple_cond, logic, sub, ...] (chained)
         """
-        # simple part
-        simple = tokens[0]
+        # --- Detect pure simple-condition case ---
+        # tokens might be a ParseResults or list of exactly 3 strings/numbers
+        if len(tokens) == 3 and isinstance(tokens[0], str):
+            simple = tokens  # ['col', 'op', raw]
+            rest = []
+        else:
+            # tokens[0] is a simple_condition group, rest are [logic, subcond, logic, subcond...]
+            simple = tokens[0]
+            rest = tokens[1:]
+
+        # Extract column, operator, raw value
         col, op, raw = simple[0], simple[1], simple[2]
-        # 把 raw 转成 Python 值
+        # Convert raw literal to int/float if possible
         try:
             val = int(raw)
         except:
@@ -260,28 +283,34 @@ class QueryManager:
                 val = float(raw)
             except:
                 val = raw
-        # 构造最内层的函数
+
+        # Build the first (innermost) comparison function
         if op == "=":
             funcs = [lambda row, c=col, v=val: row.get(c) == v]
+        elif op == "!=":
+            funcs = [lambda row, c=col, v=val: row.get(c) != v]
         elif op == "<":
             funcs = [lambda row, c=col, v=val: row.get(c) < v]
         elif op == ">":
             funcs = [lambda row, c=col, v=val: row.get(c) > v]
+        elif op == "<=":
+            funcs = [lambda row, c=col, v=val: row.get(c) <= v]
+        elif op == ">=":
+            funcs = [lambda row, c=col, v=val: row.get(c) >= v]
         else:
             raise Exception(f"Unsupported operator: {op}")
 
+        # Now handle any chained (logic, subcondition) in rest
         ops = []
-        # 如果后面还有 AND/OR + subcondition
-        idx = 1
-        while idx < len(tokens):
-            logic = tokens[idx].upper()
-            sub = tokens[idx + 1]
+        idx = 0
+        while idx < len(rest):
+            logic = rest[idx].upper()  # "AND"/"OR"
+            sub = rest[idx + 1]
             ops.append(logic)
-            # 递归
             funcs.append(self._build_condition_fn(sub))
             idx += 2
 
-        # 最终合并所有函数
+        # Combine all funcs by AND/OR
         def where_fn(row):
             res = funcs[0](row)
             for logic, f in zip(ops, funcs[1:]):
@@ -292,277 +321,154 @@ class QueryManager:
             return res
 
         return where_fn
-
+ 
     def _build_where_fn(self, where_parse):
-        """
-        where_parse 是 parse_query 得到的 where_condition，形如
-        ['WHERE', cond_tokens...]
-        跳过第 0 个 'WHERE'，把余下 tokens 传给 _build_condition_fn
-        """
-        cond_tokens = where_parse[1:]  # 去掉 'WHERE'
+       
+        cond_tokens = where_parse[1:] 
         return self._build_condition_fn(cond_tokens)
 
     @track_time
     def execute_query(self, query: str):
+   
         """
-        Execute the parsed query.
-
+        Execute a SQL statement. Supports:
+        - CREATE TABLE / CREATE INDEX
+        - DROP TABLE / DROP INDEX
+        - INSERT
+        - SELECT (with optional JOIN and WHERE)
+        - DELETE
+        - UPDATE
         """
+        # Parse one or more statements
         parsed_queries = self.parse_query(query)
 
-        for parsed_query in parsed_queries:
-            print(parsed_query)
-            command = parsed_query[0]
-            if command == "CREATE":
-                if parsed_query[1] == "TABLE":
-                    table_name, raw_columns = parsed_query[2:4]
-                    columns = []
-                    primary_key = None
-                    foreign_keys = []
-
-                    for col in raw_columns:
-                        col_name, col_type = col[0], col[1]
+        for parsed in parsed_queries:
+            cmd = parsed[0].upper()
+            where_tok    = parsed.get("where")
+            base_where_fn = self._build_where_fn(where_tok) if where_tok else None
+            # ----- CREATE -----
+            if cmd == "CREATE":
+                # CREATE TABLE
+                if parsed[1].upper() == "TABLE":
+                    table_name, raw_cols = parsed[2:4]
+                    cols = []
+                    pk = None
+                    fks = []
+                    # Extract column defs, PK and FK
+                    for col in raw_cols:
+                        name, ctype = col[0], col[1]
+                        cols.append((name, ctype))
                         constraints = col[2] if len(col) > 2 else []
-                        columns.append((col_name, col_type))
-
                         if "PRIMARY KEY" in " ".join(constraints):
-                            primary_key = col_name
-
-                        if any(
-                            "FOREIGN" in constraint for constraint in constraints
-                        ) and any("KEY" in constraint for constraint in constraints):
+                            pk = name
+                        if any("FOREIGN" in c for c in constraints) and any("KEY" in c for c in constraints):
                             ref_table = constraints[3]
                             ref_col = constraints[4]
-                            foreign_keys.append((col_name, ref_table, ref_col))
+                            fks.append((name, ref_table, ref_col))
+                    self.ddl_manager.create_table(table_name, cols, pk, fks)
 
-                    self.ddl_manager.create_table(
-                        table_name, columns, primary_key, foreign_keys
-                    )
+                # CREATE INDEX
+                elif parsed[1].upper() == "INDEX":
+                    idx_name = parsed[2]
+                    tbl = parsed[4]
+                    col = parsed[5][0]
+                    self.ddl_manager.create_index(tbl, col, idx_name)
+                continue
 
-                elif parsed_query[1] == "INDEX":
-                    index_name = parsed_query[2]
-                    table_name = parsed_query[4]
-                    column = parsed_query[5]
+            # ----- DROP -----
+            if cmd == "DROP":
+                # DROP TABLE
+                if parsed[1].upper() == "TABLE":
+                    tbl = parsed[2]
+                    self.ddl_manager.drop_table(tbl)
+                # DROP INDEX
+                elif parsed[1].upper() == "INDEX":
+                    idx_name = parsed[2]
+                    self.ddl_manager.drop_index(idx_name)
+                continue
 
-                    self.ddl_manager.create_index(table_name, column[0], index_name)
-
-            elif command == "DROP":
-                if parsed_query[1] == "TABLE":
-                    table_name = parsed_query[2]
-                    self.ddl_manager.drop_table(table_name)
-                elif parsed_query[1] == "INDEX":
-                    index_name = parsed_query[2]
-                    self.ddl_manager.drop_index(index_name)
-
-            elif command == "INSERT":
-                table_name = parsed_query[2]  # The table name
-                columns = parsed_query[3]  # The list of columns
-                values = [
-                    (
-                        int(value)
-                        if value.isdigit()
-                        else (
-                            float(value)
-                            if value.replace(".", "", 1).isdigit()
-                            else value
-                        )
-                    )
-                    for value in parsed_query[5]
-                ]  # Convert values to int or float if applicable
-                self.dml_manager.insert(table_name, values)
-
-            elif command == "SELECT":
-                selected_columns = parsed_query[1] if parsed_query[1] != "*" else None
-                from_clause = parsed_query[3]
-
-                table_name = from_clause[0]
-                where_function = None
-
-                where_flag = False
-                # Process WHERE conditions, if any
-                where_condition = parsed_query[4] if len(parsed_query) > 4 else None
-                if where_condition:
-                    where_flag = True
-                    where_column = where_condition[1]
-                    where_operator = where_condition[2]
-                    where_value = (
-                        int(where_condition[3])
-                        if where_condition[3].isdigit()
-                        else (
-                            float(where_condition[3])
-                            if where_condition[3].replace(".", "", 1).isdigit()
-                            else where_condition[3]
-                        )
-                    )
-
-                    if "." in where_column:
-                        table_prefix, column_name = where_column.split(".")
-                        key_name = f"{table_prefix}.{column_name}"
+            # ----- INSERT -----
+            if cmd == "INSERT":
+                tbl = parsed[2]
+                raw_vals = parsed.get("values") or []
+                # Convert to int/float if possible
+                vals = []
+                for v in raw_vals:
+                    if isinstance(v, str) and v.isdigit():
+                        vals.append(int(v))
+                    elif isinstance(v, str) and v.replace(".","",1).isdigit():
+                        vals.append(float(v))
                     else:
+                        vals.append(v)
+                self.dml_manager.insert(tbl, vals)
+                continue
 
-                        key_name = (
-                            where_column
-                            if len(from_clause) == 1
-                            else f"{table_name}.{where_column}"
-                        )
+            # ----- SELECT -----
+            if cmd == "SELECT":
+                sel = parsed[1]
+                cols = None if sel == "*" else list(sel)
+                from_clause = parsed[3]
+                left_tbl = from_clause[0]
+                # Build where function if present
+                where_tok = parsed.get("where")
+                where_fn = self._build_where_fn(where_tok) if where_tok else None
 
-                    print("Using where key:", key_name)
-
-                    if where_operator == "=":
-                        where_function = lambda row: row.get(key_name) == where_value
-                    elif where_operator == ">":
-                        where_function = lambda row: row.get(key_name) > where_value
-                    elif where_operator == "<":
-                        where_function = lambda row: row.get(key_name) < where_value
-                    else:
-                        raise Exception(
-                            f"Unsupported condition operator: {where_operator}"
-                        )
-
-                # Process JOINs, if any
+                # Check for JOIN
                 if len(from_clause) > 1:
-                    join_conditions = from_clause[1]
-
-                    if join_conditions[0] == "JOIN":
-                        right_table = join_conditions[1]
-                        left_column = join_conditions[2][1].split(".")[-1]
-                        right_column = join_conditions[2][3].split(".")[-1]
-
-                    results = self.dml_manager.select_join_with_index(
-                        left_table=table_name,
-                        right_table=right_table,
-                        left_join_col=left_column,
-                        right_join_col=right_column,
-                        columns=selected_columns,
-                        where=where_function,
+                    join = from_clause[1]
+                    right_tbl = join[1]
+                    cond = join[2]
+                    left_col = cond[1].split(".")[-1]
+                    right_col = cond[3].split(".")[-1]
+                    result = self.dml_manager.select_join_with_index(
+                        left_table=left_tbl,
+                        right_table=right_tbl,
+                        left_join_col=left_col,
+                        right_join_col=right_col,
+                        columns=cols,
+                        where=where_fn,
                     )
                 else:
-                    results = self.dml_manager.select(
-                        table_name=table_name,
-                        columns=selected_columns,
-                        where=(
-                            [where_column, where_operator, where_value]
-                            if where_flag
-                            else None
-                        ),
+                    result = self.dml_manager.select(
+                        table_name=left_tbl,
+                        columns=cols,
+                        where=where_fn,
                     )
-                return results
+                return result
 
-            elif command == "DELETE":
-                # DELETE FROM <table> [WHERE condition]
-                table_name = parsed_query["table"]
-                where_function = None
-
-                if "where" in parsed_query:
-                    where_condition = parsed_query["where"]
-                    where_column = where_condition[1]
-                    where_operator = where_condition[2]
-                    where_value = (
-                        int(where_condition[3])
-                        if where_condition[3].isdigit()
-                        else (
-                            float(where_condition[3])
-                            if where_condition[3].replace(".", "", 1).isdigit()
-                            else where_condition[3]
-                        )
-                    )
-
-                    if "." in where_column:
-                        table_for_where, column_name = where_column.split(".")
-                    else:
-                        table_for_where = table_name
-                        column_name = where_column
-
-                    db = self.storage_manager.db
-                    table_columns = db["COLUMNS"][table_for_where]
-                    column_names = list(table_columns.keys())
-                    where_column_index = column_names.index(column_name)
-
-                    if where_operator == "=":
-                        where_function = (
-                            lambda row: row[where_column_index] == where_value
-                        )
-                    elif where_operator == ">":
-                        where_function = (
-                            lambda row: row[where_column_index] > where_value
-                        )
-                    elif where_operator == "<":
-                        where_function = (
-                            lambda row: row[where_column_index] < where_value
-                        )
-                    else:
-                        raise Exception(f"Unsupported operator: {where_operator}")
-                delete_count = self.dml_manager.delete(table_name, where_function)
-                print(f"Deleted {delete_count} rows from table {table_name}.")
-
-            elif command == "UPDATE":
-
-                table_name = parsed_query["table"]
-
+            # ----- DELETE -----
+            if cmd == "DELETE":
+                tbl = parsed["table"]
+                where_parse = parsed.get("where")    
+                base_where_fn = self._build_where_fn(where_parse) if where_parse else None
+                deleted_count = self.dml_manager.delete(tbl, base_where_fn)
+                print(f"Deleted {deleted_count} rows from {tbl}.")
+                return deleted_count
+            
+            # ----- UPDATE -----
+            if cmd == "UPDATE":
+                tbl = parsed.get("table")
+                # Parse SET clauses
                 updates = {}
-                for update_item in parsed_query["updates"]:
-                    col = update_item["col"]
-                    val = update_item["val"]
+                for u in parsed["updates"]:
+                    c, v = u["col"], u["val"]
+                    if isinstance(v, str) and v.isdigit():
+                        v = int(v)
+                    elif isinstance(v, str) and v.replace(".","",1).isdigit():
+                        v = float(v)
+                    updates[c] = v
+                # Build where function if present
+                where_tok = parsed.get("where")
+                where_fn = self._build_where_fn(where_tok) if where_tok else None
+                count = self.dml_manager.update(tbl, updates, where_fn)
+                print(f"Updated {count} rows in {tbl}.")
+                return
 
-                    if isinstance(val, str):
-                        if val.isdigit():
-                            val = int(val)
-                        else:
-                            try:
-                                val = float(val)
-                            except ValueError:
-                                pass
-                    updates[col] = val
-
-                where_function = None
-                if "where" in parsed_query:
-                    where_condition = parsed_query["where"]
-                    where_column = where_condition[1]
-                    where_operator = where_condition[2]
-                    where_value = (
-                        int(where_condition[3])
-                        if where_condition[3].isdigit()
-                        else (
-                            float(where_condition[3])
-                            if where_condition[3].replace(".", "", 1).isdigit()
-                            else where_condition[3]
-                        )
-                    )
-                    if "." in where_column:
-                        table_for_where, column_name = where_column.split(".")
-                    else:
-                        table_for_where = table_name
-                        column_name = where_column
-
-                    db = self.storage_manager.db
-                    table_columns = db["COLUMNS"][table_for_where]
-                    column_names = list(table_columns.keys())
-                    where_column_index = column_names.index(column_name)
-
-                    if where_operator == "=":
-                        where_function = (
-                            lambda row: row[where_column_index] == where_value
-                        )
-                    elif where_operator == ">":
-                        where_function = (
-                            lambda row: row[where_column_index] > where_value
-                        )
-                    elif where_operator == "<":
-                        where_function = (
-                            lambda row: row[where_column_index] < where_value
-                        )
-                    else:
-                        raise Exception(f"Unsupported operator: {where_operator}")
-
-                update_count = self.dml_manager.update(
-                    table_name, updates, where_function
-                )
-                print(f"Updated {update_count} rows in table {table_name}.")
-
-            else:
-                raise Exception("Unsupported SQL command")
+            # Unsupported command
+            raise Exception(f"Unsupported SQL command: {cmd}")
 
 
+# -*- coding: utf-8 -*-
 if __name__ == "__main__":
 
     stor_mgr = StorageManager()

@@ -199,14 +199,24 @@ class DMLManager:
             return False
 
         def match(row):
+            # If where is a Python function, use it directly on the row dict
+            if callable(where):
+                return where(row)
+            # No condition: include all rows
             if where is None:
                 return True
+            # Single simple condition as a list: ["col", "op", value]
             if isinstance(where, list):
                 return eval_condition(where, row)
-            elif isinstance(where, dict) and where["op"] in ("AND", "OR"):
+            # Compound AND/OR condition as a dict
+            if isinstance(where, dict) and where.get("op") in ("AND", "OR"):
                 left = eval_condition(where["left"], row)
                 right = eval_condition(where["right"], row)
-                return (left and right) if where["op"] == "AND" else (left or right)
+                if where["op"] == "AND":
+                    return left and right
+                else:
+                    return left or right
+            # Fallback: exclude row
             return False
 
         filtered_rows = []
@@ -252,40 +262,84 @@ class DMLManager:
         """
         Deletes rows from a table.
         :param table_name: The name of the table.
-        :param where: A callable that takes a row and returns True if the row should be deleted.
-                      If None, all rows will be deleted.
-        :return: The number of rows deleted.
+        :param where: 
+            - None: delete all rows
+            - list [col, op, val]: single simple condition
+            - dict {"op":"AND"/"OR", "left":..., "right":...}: 
+            - callable(row_dict)->bool: 
+        :return: Number of rows deleted.
         """
-        self.reload()
 
+        # 1. Reload data and validate table
+        self.reload()
         if table_name not in self.db["TABLES"]:
             raise ValueError(f"Table '{table_name}' does not exist")
 
-        original_data = self.db["DATA"][table_name]
-        table_columns = self.db["COLUMNS"][table_name]
+        original = self.db["DATA"][table_name]
+        cols_def = self.db["COLUMNS"][table_name]
+        col_names = list(cols_def.keys())
+        col_idx = {c: i for i, c in enumerate(col_names)}
+
+        if where is None:
+            def where_fn(row): return True
+        elif callable(where):
+            def where_fn(row):
+                row_dict = dict(zip(col_names, row))
+                return where(row_dict)
+        elif isinstance(where, list):
+        
+            def where_fn(row):
+                c, op, v = where
+                val = row[col_idx[c]]
+                if op == "=":  return val == v
+                if op == "!=": return val != v
+                if op == "<":  return val < v
+                if op == ">":  return val > v
+                raise ValueError(f"Unsupported operator '{op}'")
+        elif isinstance(where, dict) and where.get("op") in ("AND", "OR"):
+       
+            def eval_cond(cond, row):
+                c, op, v = cond
+                val = row[col_idx[c]]
+                if op == "=":  return val == v
+                if op == "!=": return val != v
+                if op == "<":  return val < v
+                if op == ">":  return val > v
+                raise ValueError(f"Unsupported operator '{op}'")
+
+            def where_fn(row):
+                L = eval_cond(where["left"], row)
+                R = eval_cond(where["right"], row)
+                return (L and R) if where["op"] == "AND" else (L or R)
+        else:
+            raise ValueError(f"Unsupported where type: {where!r}")
+
+        
         new_data = []
         delete_count = 0
-
-        # Filter rows: keep rows that do not match the 'where' condition
-        for row in original_data:
-            if where is None or where(row):
+        for row in original:
+            if where_fn(row):
                 delete_count += 1
             else:
                 new_data.append(row)
         self.db["DATA"][table_name] = new_data
 
-        # Rebuild indexes for this table if they exist
+      
         if table_name in self.index:
-            for col in self.index[table_name]:
-                self.index[table_name][col] = OOBTree()
-            for row_id, row in enumerate(new_data):
-                for col, tree in self.index[table_name].items():
-                    col_index = list(table_columns.keys()).index(col)
-                    value = row[col_index]
-                    if value not in tree:
-                        tree[value] = []
-                    tree[value].append(row_id)
+           
+            for col, info in list(self.index[table_name].items()):
+                name = info.get("name", f"{table_name}_{col}_idx") if isinstance(info, dict) else f"{table_name}_{col}_idx"
+                self.index[table_name][col] = {"tree": OOBTree(), "name": name}
+            
+            for rid, row in enumerate(new_data):
+                for col, info in self.index[table_name].items():
+                    tree = info["tree"]
+                    val = row[col_idx[col]]
+                    if val not in tree:
+                        tree[val] = []
+                    tree[val].append(rid)
 
+       
         self.storage_manager.save_db()
         self.storage_manager.save_index()
 
@@ -293,58 +347,55 @@ class DMLManager:
 
     def update(self, table_name, updates, where=None):
         self.reload()
-
         if table_name not in self.db["TABLES"]:
             raise ValueError(f"Table '{table_name}' does not exist")
 
         table_columns = self.db["COLUMNS"][table_name]
         data = self.db["DATA"][table_name]
-        update_count = 0
+        col_names = list(table_columns.keys())
+        col_idx = {c: i for i, c in enumerate(col_names)}
 
+        # 2. Wrap `where` so that if it's a dict->bool function, we convert row list to dict
+        if callable(where):
+            base_where = where
+            def where_fn(row_list):
+                row_dict = dict(zip(col_names, row_list))
+                return base_where(row_dict)
+        else:
+            where_fn = where  # could be None, list, or dict
+
+        # 3. Perform updates
+        update_count = 0
         for idx, row in enumerate(data):
-            if where is None or where(row):
+            if where_fn is None or where_fn(row):
                 new_row = row.copy()
                 for col, new_value in updates.items():
                     if col not in table_columns:
                         raise ValueError(
                             f"Column '{col}' does not exist in table '{table_name}'"
                         )
-                    col_index = list(table_columns.keys()).index(col)
-                    new_row[col_index] = (
-                        new_value(new_row[col_index])
-                        if callable(new_value)
-                        else new_value
-                    )
+                    ci = col_idx[col]
+                    # support callable(new_value) or constant
+                    new_row[ci] = new_value(new_row[ci]) if callable(new_value) else new_value
                 data[idx] = new_row
                 update_count += 1
 
+        # 4. Rebuild indexes for this table if they exist
         if table_name in self.index:
+            # reset each index entry to {"tree": OOBTree(), "name": ...}
+            for col, info in list(self.index[table_name].items()):
+                name = info.get("name", f"{table_name}_{col}_idx") if isinstance(info, dict) else f"{table_name}_{col}_idx"
+                self.index[table_name][col] = {"tree": OOBTree(), "name": name}
+            # reinsert all rows
+            for rid, row in enumerate(data):
+                for col, info in self.index[table_name].items():
+                    tree = info["tree"]
+                    val = row[col_idx[col]]
+                    if val not in tree:
+                        tree[val] = []
+                    tree[val].append(rid)
 
-            for col, index_info in self.index[table_name].items():
-
-                if isinstance(index_info, dict):
-                    old_name = index_info.get("name", f"{table_name}_{col}_idx")
-
-                    new_tree = OOBTree()
-
-                    self.index[table_name][col] = {"tree": new_tree, "name": old_name}
-                else:
-
-                    new_tree = OOBTree()
-                    self.index[table_name][col] = {
-                        "tree": new_tree,
-                        "name": f"{table_name}_{col}_idx",
-                    }
-
-            for row_id, row in enumerate(data):
-                for col, index_info in self.index[table_name].items():
-                    tree = index_info["tree"]
-                    col_index = list(table_columns.keys()).index(col)
-                    value = row[col_index]
-                    if value not in tree:
-                        tree[value] = []
-                    tree[value].append(row_id)
-
+        # 5. Save changes
         self.storage_manager.save_db()
         self.storage_manager.save_index()
 
