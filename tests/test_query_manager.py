@@ -190,6 +190,13 @@ class TestQueryManager(unittest.TestCase):
         self.assertIn(1, index["Orders"]["OrderID"]["tree"])
         self.assertEqual(index["Orders"]["OrderID"]["tree"][1], [0])
 
+    def test_execute_insert_with_wrong_data_type(self):
+        self.setup_table_users()
+
+        query = "INSERT INTO Users (UserID, UserName, Email) VALUES ('2', 'Bob', 'bob@example.com')"
+        with self.assertRaises(ValueError):
+            self.query_manager.execute_query(query)
+
     ############################# CREATE INDEX ##########################
     def test_execute_create_index_query(self):
         self.setup_table_users()
@@ -305,6 +312,18 @@ class TestQueryManager(unittest.TestCase):
                 {"Users.UserName": "Bob", "Orders.OrderID": 2}
             ],
         )
+
+    def test_execute_select_with_order_by(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.setup_table_orders()
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 1)
+        self.insert_order(3, "2023-10-03", 50.0, 1)
+        self.insert_order(4, "2023-10-04", 150.0, 1)
+
+        query = "SELECT * FROM Orders ORDER BY Amount DESC"
+        # result = self.query_manager.execute_query(query)
 
     ############################### UPDATE ##########################
     def test_execute_update_query(self):
