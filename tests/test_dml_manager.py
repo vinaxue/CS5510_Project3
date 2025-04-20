@@ -211,16 +211,43 @@ class TestDMLManager(unittest.TestCase):
         self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
 
         # Delete user with id = 1
-        deleted_count = self.dml_manager.delete("users", where=lambda row: row[0] == 1)
+        deleted_count = self.dml_manager.delete(
+            "users", where=lambda row: row["id"] == 1
+        )
         self.assertEqual(deleted_count, 1)
         self.assertEqual(len(self.storage.db["DATA"]["users"]), 1)
         self.assertEqual(self.storage.db["DATA"]["users"][0][0], 2)
+
+    def test_delete_with_two_conditions(self):
+        """Test deleting rows with two conditions"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+        self.dml_manager.insert("users", [3, "Charlie", "charlie@example.com"])
+
+        deleted_count = self.dml_manager.delete(
+            "users",
+            where={
+                "op": "AND",
+                "left": ["id", "<", 3],
+                "right": ["name", "=", "Alice"],
+            },
+        )
+        self.assertEqual(deleted_count, 1)
+        self.assertEqual(len(self.storage.db["DATA"]["users"]), 2)
+        self.assertEqual(self.storage.db["DATA"]["users"][0][0], 2)
+
+        deleted_count = self.dml_manager.delete(
+            "users",
+            where={"op": "OR", "left": ["id", ">", 2], "right": ["name", "=", "Bob"]},
+        )
+        self.assertEqual(deleted_count, 2)
+        self.assertEqual(len(self.storage.db["DATA"]["users"]), 0)
 
     def test_delete_updates_index(self):
         """Test that delete operation updates the index"""
         self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
         self.dml_manager.delete("users")
-        self.assertEqual(len(self.storage.index["users"]["id"]), 0)
+        self.assertEqual(len(self.storage.index["users"]["id"]["tree"]), 0)
 
     ########################## UPDATE TESTS ##########################
     def test_update_all_rows(self):
@@ -243,11 +270,40 @@ class TestDMLManager(unittest.TestCase):
 
         # Update only Bob's email
         updated_count = self.dml_manager.update(
-            "users", {"email": "new@example.com"}, where=lambda row: row[0] == 2
+            "users", {"email": "new@example.com"}, where=lambda row: row["id"] == 2
         )
         self.assertEqual(updated_count, 1)
         self.assertEqual(self.storage.db["DATA"]["users"][0][2], "alice@example.com")
         self.assertEqual(self.storage.db["DATA"]["users"][1][2], "new@example.com")
+
+    def test_update_with_two_conditions(self):
+        """Test updating rows with a condition"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+        self.dml_manager.insert("users", [3, "Charlie", "charlie@example.com"])
+
+        updated_count = self.dml_manager.update(
+            "users",
+            {"email": "new@example.com"},
+            where={
+                "op": "AND",
+                "left": ["id", "<", 3],
+                "right": ["name", "=", "Alice"],
+            },
+        )
+        self.assertEqual(updated_count, 1)
+        self.assertEqual(self.storage.db["DATA"]["users"][0][2], "new@example.com")
+        self.assertEqual(self.storage.db["DATA"]["users"][1][2], "bob@example.com")
+
+        updated_count = self.dml_manager.update(
+            "users",
+            {"email": "new2@example.com"},
+            where={"op": "OR", "left": ["id", ">", 2], "right": ["name", "=", "Alice"]},
+        )
+        self.assertEqual(updated_count, 2)
+        self.assertEqual(self.storage.db["DATA"]["users"][0][2], "new2@example.com")
+        self.assertEqual(self.storage.db["DATA"]["users"][1][2], "bob@example.com")
+        self.assertEqual(self.storage.db["DATA"]["users"][2][2], "new2@example.com")
 
     def test_update_updates_index(self):
         """Test that update operation updates the index"""
@@ -323,6 +379,49 @@ class TestDMLManager(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["users.name"], "Alice")
         self.assertEqual(results[0]["orders.amount"], 99.99)
+
+    def test_select_join_with_two_conditions(self):
+        """Test joining two tables with additional conditions"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("orders", [102, 1, 49.99])
+        self.dml_manager.insert("orders", [103, 2, 49.99])
+
+        # Join with condition: only orders with amount > 50
+        results = self.dml_manager.select_join_with_index(
+            left_table="users",
+            right_table="orders",
+            left_join_col="id",
+            right_join_col="user_id",
+            where={
+                "op": "AND",
+                "left": ["orders.amount", ">", 50],
+                "right": ["users.name", "=", "Alice"],
+            },
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["users.name"], "Alice")
+        self.assertEqual(results[0]["orders.amount"], 99.99)
+
+        results = self.dml_manager.select_join_with_index(
+            left_table="users",
+            right_table="orders",
+            left_join_col="id",
+            right_join_col="user_id",
+            where={
+                "op": "OR",
+                "left": ["orders.amount", ">", 50],
+                "right": ["users.name", "=", "Alice"],
+            },
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["users.name"], "Alice")
+        self.assertEqual(results[0]["orders.amount"], 99.99)
+        self.assertEqual(results[1]["users.name"], "Alice")
+        self.assertEqual(results[1]["orders.amount"], 49.99)
 
     def test_select_join_with_self(self):
         """Test joining a table with itself"""

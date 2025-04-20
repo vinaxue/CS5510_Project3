@@ -90,6 +90,28 @@ class TestDDLManager(unittest.TestCase):
         self.assertIn("employees", self.storage.index)
         self.assertIn("id", self.storage.index["employees"])  # Index on primary key
 
+    def test_create_table_with_invalid_foreign_key(self):
+        """Test creating a table with an invalid foreign key raises an error"""
+        self.ddl_manager.create_table(
+            "departments", [("id", INT), ("name", STRING)], primary_key="id"
+        )
+        with self.assertRaises(ValueError):
+            self.ddl_manager.create_table(
+                "employees",
+                [("id", INT), ("name", STRING), ("dept_id", INT)],
+                primary_key="id",
+                foreign_keys=[("dept_id", "nonexistent_table", "id")],
+            )
+
+    def test_create_table_with_invalid_column_type(self):
+        """Test creating a table with an invalid column type raises an error"""
+        with self.assertRaises(ValueError):
+            self.ddl_manager.create_table(
+                "users",
+                [("id", "INVALID_TYPE"), ("name", STRING)],
+                primary_key="id",
+            )
+
     ########################## DROP TABLE ##########################
     def test_drop_table(self):
         """Test dropping an existing table"""

@@ -226,6 +226,22 @@ class TestQueryManager(unittest.TestCase):
 
         self.assertEqual(result, [{"UserName": "Bob"}])
 
+    def test_execute_select_query_with_two_conditions(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.insert_user(3, "Charlie", "charlie@example.com")
+
+        query = "SELECT UserName FROM Users WHERE UserID < 2 OR UserName = 'Bob'"
+        result = self.query_manager.execute_query(query)
+
+        self.assertEqual(result, [{"UserName": "Alice"}, {"UserName": "Bob"}])
+
+        query = "SELECT UserName FROM Users WHERE UserID < 3 AND UserID > 1"
+        result = self.query_manager.execute_query(query)
+
+        self.assertEqual(result, [{"UserName": "Bob"}])
+
     def test_execute_select_query_with_join(self):
         self.setup_table_users()
         self.setup_table_orders()
@@ -259,6 +275,35 @@ class TestQueryManager(unittest.TestCase):
         self.assertEqual(
             result,
             [{"Users.UserName": "Alice", "Orders.OrderID": 1}],
+        )
+
+    def test_execute_select_query_with_join_with_two_conditions(self):
+        self.setup_table_users()
+        self.setup_table_orders()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 2)
+        self.insert_order(3, "2023-10-03", 10.0, 1)
+
+        query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID WHERE Users.UserID < 2 AND Orders.Amount > 50.0"
+        result = self.query_manager.execute_query(query)
+
+        self.assertEqual(
+            result,
+            [{"Users.UserName": "Alice", "Orders.OrderID": 1}],
+        )
+
+        query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID WHERE Users.UserID < 2 OR Orders.Amount > 50.0"
+        result = self.query_manager.execute_query(query)
+
+        self.assertEqual(
+            result,
+            [
+                {"Users.UserName": "Alice", "Orders.OrderID": 1},
+                {"Users.UserName": "Bob", "Orders.OrderID": 2},
+                {"Users.UserName": "Alice", "Orders.OrderID": 3},
+            ],
         )
 
     ############################### UPDATE ##########################

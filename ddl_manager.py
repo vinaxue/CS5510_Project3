@@ -1,5 +1,7 @@
 from BTrees.OOBTree import OOBTree
 
+from utils import DOUBLE, INT, STRING
+
 
 class DDLManager:
     """Support data definition queries: CREATE TABLE, DROP TABLE, CREATE INDEX, DROP INDEX"""
@@ -82,6 +84,14 @@ class DDLManager:
         if table_name in self.db["TABLES"]:
             raise ValueError(f"Table '{table_name}' already exists")
 
+        # Validate column types
+        valid_types = {INT, STRING, DOUBLE}
+        for col_name, col_type in columns:
+            if col_type not in valid_types:
+                raise ValueError(
+                    f"Invalid column type '{col_type}' for column '{col_name}'. Valid types are: {valid_types}"
+                )
+
         # Add table to the database
         self.db["TABLES"][table_name] = {
             "primary_key": primary_key,
@@ -97,9 +107,18 @@ class DDLManager:
 
         # Create index only for the primary key
         self.create_index(table_name, primary_key)
-
-        # Store foreign key relationships
+        # Validate foreign key references
         if foreign_keys:
+            for _, ref_table, ref_col in foreign_keys:
+                if ref_table not in self.db["TABLES"]:
+                    raise ValueError(
+                        f"Referenced table '{ref_table}' in foreign key does not exist"
+                    )
+                if ref_col not in self.db["COLUMNS"][ref_table]:
+                    raise ValueError(
+                        f"Referenced column '{ref_col}' in table '{ref_table}' does not exist"
+                    )
+
             self.db["FOREIGN_KEYS"][table_name] = {
                 col: {"referenced_table": ref_table, "referenced_column": ref_col}
                 for col, ref_table, ref_col in foreign_keys

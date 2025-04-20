@@ -13,11 +13,20 @@ dml_manager = DMLManager(storage_manager)
 
 @track_time
 def load_data(name, data):
-    ddl_manager.create_table(
-        name,
-        [("id", INT), ("value", INT)],
-        primary_key="id",
-    )
+    try:
+        ddl_manager.create_table(
+            name,
+            [("id", INT), ("value", INT)],
+            primary_key="id",
+        )
+    except Exception as e:
+        print(f"Error creating table {name}: {e}. Dropping table and retrying.")
+        ddl_manager.drop_table(name)
+        ddl_manager.create_table(
+            name,
+            [("id", INT), ("value", INT)],
+            primary_key="id",
+        )
 
     # Build once before starting
     table_data = storage_manager.db["DATA"][name]
@@ -51,7 +60,7 @@ def load_data(name, data):
 rel_i_i_1000 = []
 for i in range(1000):
     rel_i_i_1000.append([i, i])
-# load_data("rel_i_i_1000", rel_i_i_1000)
+load_data("rel_i_i_1000", rel_i_i_1000)
 
 
 rel_i_1_1000 = []
@@ -71,27 +80,27 @@ for i in range(100000):
 # load_data("rel_i_1_100000", rel_i_1_100000)
 
 
-db = storage_manager.load_db()
-print("rel_i_i_1000", len(db["DATA"]["rel_i_i_1000"]))
-print("rel_i_1_1000", len(db["DATA"]["rel_i_1_1000"]))
-print("rel_i_i_100000", len(db["DATA"]["rel_i_i_100000"]))
-print("rel_i_1_100000", len(db["DATA"]["rel_i_1_100000"]))
+# db = storage_manager.load_db()
+# print("rel_i_i_1000", len(db["DATA"]["rel_i_i_1000"]))
+# print("rel_i_1_1000", len(db["DATA"]["rel_i_1_1000"]))
+# print("rel_i_i_100000", len(db["DATA"]["rel_i_i_100000"]))
+# print("rel_i_1_100000", len(db["DATA"]["rel_i_1_100000"]))
 
 
-@track_time
-def select_data(name, where):
-    result = dml_manager.select(name, where=where)
-    return result
+# @track_time
+# def select_data(name, where):
+#     result = dml_manager.select(name, where=where)
+#     return result
 
 
-print("rel_i_i_1000 [835]", select_data("rel_i_i_1000", ["value", "=", 835]))
-print("rel_i_1_1000 [835]", select_data("rel_i_1_1000", ["id", "=", 835]))
-print("rel_i_i_100000 [835]", select_data("rel_i_i_100000", ["value", "=", 2835]))
-print("rel_i_1_100000 [835]", select_data("rel_i_1_100000", ["id", "=", 2835]))
-print(
-    "rel_i_i_100000 [835, 3004]",
-    select_data(
-        "rel_i_i_100000",
-        {"op": "OR", "left": ["value", "=", 835], "right": ["id", "=", 3004]},
-    ),
-)
+# print("rel_i_i_1000 [835]", select_data("rel_i_i_1000", ["value", "=", 835]))
+# print("rel_i_1_1000 [835]", select_data("rel_i_1_1000", ["id", "=", 835]))
+# print("rel_i_i_100000 [835]", select_data("rel_i_i_100000", ["value", "=", 2835]))
+# print("rel_i_1_100000 [835]", select_data("rel_i_1_100000", ["id", "=", 2835]))
+# print(
+#     "rel_i_i_100000 [835, 3004]",
+#     select_data(
+#         "rel_i_i_100000",
+#         {"op": "OR", "left": ["value", "=", 835], "right": ["id", "=", 3004]},
+#     ),
+# )

@@ -1,7 +1,7 @@
 from collections import defaultdict
 from BTrees.OOBTree import OOBTree
 
-from utils import DOUBLE, INT, MAX, MIN, STRING, SUM
+from utils import DOUBLE, INT, MAX, MIN, STRING, SUM, _make_where_fn
 
 
 class DMLManager:
@@ -185,44 +185,12 @@ class DMLManager:
         if indexed_rows is not None:
             row_source = indexed_rows
 
-        def eval_condition(cond, row):
-            col, op, val = cond
-            v = row[col]
-            if op == "=":
-                return v == val
-            if op == "!=":
-                return v != val
-            if op == "<":
-                return v < val
-            if op == ">":
-                return v > val
-            return False
-
-        def match(row):
-            # If where is a Python function, use it directly on the row dict
-            if callable(where):
-                return where(row)
-            # No condition: include all rows
-            if where is None:
-                return True
-            # Single simple condition as a list: ["col", "op", value]
-            if isinstance(where, list):
-                return eval_condition(where, row)
-            # Compound AND/OR condition as a dict
-            if isinstance(where, dict) and where.get("op") in ("AND", "OR"):
-                left = eval_condition(where["left"], row)
-                right = eval_condition(where["right"], row)
-                if where["op"] == "AND":
-                    return left and right
-                else:
-                    return left or right
-            # Fallback: exclude row
-            return False
+        where_fn = _make_where_fn(where, col_names)
 
         filtered_rows = []
         for row_list in row_source:
             row_dict = dict(zip(col_names, row_list))
-            if match(row_dict):
+            if where_fn(row_dict):
                 filtered_rows.append(row_dict)
 
         if group_by is None and aggregates is None:
@@ -262,11 +230,11 @@ class DMLManager:
         """
         Deletes rows from a table.
         :param table_name: The name of the table.
-        :param where: 
+        :param where:
             - None: delete all rows
             - list [col, op, val]: single simple condition
-            - dict {"op":"AND"/"OR", "left":..., "right":...}: 
-            - callable(row_dict)->bool: 
+            - dict {"op":"AND"/"OR", "left":..., "right":...}:
+            - callable(row_dict)->bool:
         :return: Number of rows deleted.
         """
 
@@ -280,41 +248,8 @@ class DMLManager:
         col_names = list(cols_def.keys())
         col_idx = {c: i for i, c in enumerate(col_names)}
 
-        if where is None:
-            def where_fn(row): return True
-        elif callable(where):
-            def where_fn(row):
-                row_dict = dict(zip(col_names, row))
-                return where(row_dict)
-        elif isinstance(where, list):
-        
-            def where_fn(row):
-                c, op, v = where
-                val = row[col_idx[c]]
-                if op == "=":  return val == v
-                if op == "!=": return val != v
-                if op == "<":  return val < v
-                if op == ">":  return val > v
-                raise ValueError(f"Unsupported operator '{op}'")
-        elif isinstance(where, dict) and where.get("op") in ("AND", "OR"):
-       
-            def eval_cond(cond, row):
-                c, op, v = cond
-                val = row[col_idx[c]]
-                if op == "=":  return val == v
-                if op == "!=": return val != v
-                if op == "<":  return val < v
-                if op == ">":  return val > v
-                raise ValueError(f"Unsupported operator '{op}'")
+        where_fn = _make_where_fn(where, col_names)
 
-            def where_fn(row):
-                L = eval_cond(where["left"], row)
-                R = eval_cond(where["right"], row)
-                return (L and R) if where["op"] == "AND" else (L or R)
-        else:
-            raise ValueError(f"Unsupported where type: {where!r}")
-
-        
         new_data = []
         delete_count = 0
         for row in original:
@@ -324,13 +259,16 @@ class DMLManager:
                 new_data.append(row)
         self.db["DATA"][table_name] = new_data
 
-      
         if table_name in self.index:
-           
+
             for col, info in list(self.index[table_name].items()):
-                name = info.get("name", f"{table_name}_{col}_idx") if isinstance(info, dict) else f"{table_name}_{col}_idx"
+                name = (
+                    info.get("name", f"{table_name}_{col}_idx")
+                    if isinstance(info, dict)
+                    else f"{table_name}_{col}_idx"
+                )
                 self.index[table_name][col] = {"tree": OOBTree(), "name": name}
-            
+
             for rid, row in enumerate(new_data):
                 for col, info in self.index[table_name].items():
                     tree = info["tree"]
@@ -339,7 +277,6 @@ class DMLManager:
                         tree[val] = []
                     tree[val].append(rid)
 
-       
         self.storage_manager.save_db()
         self.storage_manager.save_index()
 
@@ -356,13 +293,7 @@ class DMLManager:
         col_idx = {c: i for i, c in enumerate(col_names)}
 
         # 2. Wrap `where` so that if it's a dict->bool function, we convert row list to dict
-        if callable(where):
-            base_where = where
-            def where_fn(row_list):
-                row_dict = dict(zip(col_names, row_list))
-                return base_where(row_dict)
-        else:
-            where_fn = where  # could be None, list, or dict
+        where_fn = _make_where_fn(where, col_names)
 
         # 3. Perform updates
         update_count = 0
@@ -376,7 +307,9 @@ class DMLManager:
                         )
                     ci = col_idx[col]
                     # support callable(new_value) or constant
-                    new_row[ci] = new_value(new_row[ci]) if callable(new_value) else new_value
+                    new_row[ci] = (
+                        new_value(new_row[ci]) if callable(new_value) else new_value
+                    )
                 data[idx] = new_row
                 update_count += 1
 
@@ -384,7 +317,11 @@ class DMLManager:
         if table_name in self.index:
             # reset each index entry to {"tree": OOBTree(), "name": ...}
             for col, info in list(self.index[table_name].items()):
-                name = info.get("name", f"{table_name}_{col}_idx") if isinstance(info, dict) else f"{table_name}_{col}_idx"
+                name = (
+                    info.get("name", f"{table_name}_{col}_idx")
+                    if isinstance(info, dict)
+                    else f"{table_name}_{col}_idx"
+                )
                 self.index[table_name][col] = {"tree": OOBTree(), "name": name}
             # reinsert all rows
             for rid, row in enumerate(data):
@@ -400,7 +337,7 @@ class DMLManager:
         self.storage_manager.save_index()
 
         return update_count
-    
+
     def select_join_with_index(
         self,
         left_table,
@@ -428,70 +365,68 @@ class DMLManager:
             else:
                 left_alias, right_alias = left_table, right_table
 
-
         Lcols = list(self.db["COLUMNS"][left_table].keys())
         Rcols = list(self.db["COLUMNS"][right_table].keys())
         Ldata = self.db["DATA"][left_table]
         Rdata = self.db["DATA"][right_table]
 
-  
         try:
             Li = Lcols.index(left_join_col)
             Ri = Rcols.index(right_join_col)
         except ValueError:
-            raise ValueError(f"Join column {left_join_col} or {right_join_col} not found.")
-
+            raise ValueError(
+                f"Join column {left_join_col} or {right_join_col} not found."
+            )
 
         if len(Ldata) <= len(Rdata):
-            outer_data, outer_cols, outer_alias, outer_idx = Ldata, Lcols, left_alias, Li
+            outer_data, outer_cols, outer_alias, outer_idx = (
+                Ldata,
+                Lcols,
+                left_alias,
+                Li,
+            )
             inner_table, inner_data, inner_cols, inner_alias, inner_idx = (
-                right_table, Rdata, Rcols, right_alias, Ri
+                right_table,
+                Rdata,
+                Rcols,
+                right_alias,
+                Ri,
             )
         else:
-            outer_data, outer_cols, outer_alias, outer_idx = Rdata, Rcols, right_alias, Ri
+            outer_data, outer_cols, outer_alias, outer_idx = (
+                Rdata,
+                Rcols,
+                right_alias,
+                Ri,
+            )
             inner_table, inner_data, inner_cols, inner_alias, inner_idx = (
-                left_table, Ldata, Lcols, left_alias, Li
+                left_table,
+                Ldata,
+                Lcols,
+                left_alias,
+                Li,
             )
 
- 
         if inner_table in self.index and (
-            (inner_table == right_table and right_join_col in self.index[inner_table]) or
-            (inner_table == left_table and left_join_col in self.index[inner_table])
+            (inner_table == right_table and right_join_col in self.index[inner_table])
+            or (inner_table == left_table and left_join_col in self.index[inner_table])
         ):
 
             idx_col = right_join_col if inner_table == right_table else left_join_col
             btree = self.index[inner_table][idx_col]["tree"]
-            inner_index = {key: [inner_data[rid] for rid in btree[key]] for key in btree}
+            inner_index = {
+                key: [inner_data[rid] for rid in btree[key]] for key in btree
+            }
         else:
             inner_index = {}
             for row in inner_data:
                 key = row[inner_idx]
                 inner_index.setdefault(key, []).append(row)
 
-        def eval_cond(cond, row):
-            c, op, v = cond
-            val = row.get(c)
-            if op == "=":   return val == v
-            if op == "!=":  return val != v
-            if op == "<":   return val < v
-            if op == ">":   return val > v
-            if op == "<=":  return val <= v
-            if op == ">=":  return val >= v
-            raise ValueError(f"Unsupported operator '{op}'")
-
         if callable(where):
             match_fn = where
-        elif where is None:
-            match_fn = lambda row: True
-        elif isinstance(where, list):
-            match_fn = lambda row: eval_cond(where, row)
-        else:  # dict AND/OR
-            op = where["op"]
-            if op == "AND":
-                match_fn = lambda row: eval_cond(where["left"], row) and eval_cond(where["right"], row)
-            else:
-                match_fn = lambda row: eval_cond(where["left"], row) or eval_cond(where["right"], row)
-
+        else:
+            match_fn = _make_where_fn(where, outer_cols + inner_cols)
 
         results = []
         for o_row in outer_data:
@@ -507,10 +442,10 @@ class DMLManager:
                 for i, col in enumerate(inner_cols):
                     j[f"{inner_alias}.{col}"] = i_row[i]
                     j[col] = i_row[i]
-               
+
                 if not match_fn(j):
                     continue
-           
+
                 if columns is None:
                     results.append(j)
                 else:
