@@ -117,89 +117,64 @@ class DMLManager:
         self.storage_manager.save_index()
 
     def select(
-        self, table_name, columns=None, where=None, group_by=None, aggregates=None
-    ):
+    self, table_name, columns=None, where=None, group_by=None, aggregates=None
+):
         """
         Selects rows from a table based on optional filtering and aggregation.
         :param table_name: The name of the table.
         :param columns: List of columns to select. If None, selects all columns.
-        :param where: List of conditions to filter rows. If None, no filtering is applied.
-            e.g. {"op": "AND", "left":["col1", "op", "val"], "right": ["col2", "op", "val"]}
-            or ["col1", "op", "val"]
+        :param where: None | list | dict | callable(row_dict)->bool
         :param group_by: List of columns to group by. If None, no grouping is applied.
-        :param aggregates: Dictionary of aggregate functions to apply, e.g., {"SUM": "column_name"}.
+        :param aggregates: Dictionary of aggregate functions to apply.
         :return: A list of dictionaries representing the selected rows.
         """
-
         self.reload()
 
+       
         table_columns = self.db["COLUMNS"][table_name]
-        col_names = list(table_columns.keys())
-        table_data = self.db["DATA"][table_name]
+        col_names     = list(table_columns.keys())
+        table_data    = self.db["DATA"][table_name]
+
+
+        if where is None:
+            where_fn = lambda row: True
+        elif callable(where):
+   
+            where_fn = where
+        else:
+           
+            where_fn = _make_where_fn(where, col_names)
+
         results = []
 
-        indexed_rows = None
-        row_source = table_data
-
-        def get_indexed_rows(cond):
-            if isinstance(cond, list) and len(cond) == 3:
-                col, op, val = cond
-                if (
-                    op == "="
-                    and table_name in self.index
-                    and col in self.index[table_name]
-                ):
-                    tree = self.index[table_name][col]["tree"]
-                    if val in tree:
-                        row_ids = tree[val]
-                        return [table_data[i] for i in row_ids]
-            return None
-
-        if isinstance(where, dict) and where["op"] in ("AND", "OR"):
-            left_rows = get_indexed_rows(where["left"])
-            right_rows = get_indexed_rows(where["right"])
-            if left_rows is None:
-                left_rows = table_data
-            if right_rows is None:
-                right_rows = table_data
-
-            if (
-                where["op"] == "AND"
-                and left_rows is not None
-                and right_rows is not None
-            ):
-                left_ids = {tuple(r) for r in left_rows}
-                right_ids = {tuple(r) for r in right_rows}
-                intersection = left_ids & right_ids
-                indexed_rows = [list(row) for row in intersection]
-            elif where["op"] == "OR":
-                combined_set = set()
-                for cond_rows in [left_rows, right_rows]:
-                    if cond_rows is not None:
-                        combined_set.update(tuple(r) for r in cond_rows)
-                if combined_set:
-                    indexed_rows = [list(row) for row in combined_set]
-        elif isinstance(where, list):
-            indexed_rows = get_indexed_rows(where)
-
-        if indexed_rows is not None:
-            row_source = indexed_rows
-
-        where_fn = _make_where_fn(where, col_names)
-
+      
         filtered_rows = []
-        for row_list in row_source:
-            row_dict = dict(zip(col_names, row_list))
+        for row_list in table_data:
+            row_dict = {}
+            for col, raw in zip(col_names, row_list):
+                col_type = table_columns[col]
+                if col_type == INT:
+                    row_dict[col] = int(raw)
+                elif col_type == DOUBLE:
+                    row_dict[col] = float(raw)
+                else:  # STRING
+                    row_dict[col] = raw
+
             if where_fn(row_dict):
                 filtered_rows.append(row_dict)
 
+    
         if group_by is None and aggregates is None:
             for row in filtered_rows:
                 if columns:
+                 
                     results.append({col: row[col] for col in columns})
                 else:
+                    
                     results.append(row)
             return results
+
+   
         groups = defaultdict(list)
         for row in filtered_rows:
             key = tuple(row[col] for col in group_by)
@@ -207,10 +182,8 @@ class DMLManager:
 
         for group_key, group_rows in groups.items():
             result_row = {col: group_key[i] for i, col in enumerate(group_by)}
-
             for agg_func, col in aggregates.items():
                 values = [r[col] for r in group_rows if r[col] is not None]
-
                 if not values:
                     result_row[col] = None
                 elif agg_func == MAX:
@@ -221,10 +194,10 @@ class DMLManager:
                     result_row[col] = sum(values)
                 else:
                     raise ValueError(f"Unsupported aggregate: {agg_func}")
-
             results.append(result_row)
 
         return results
+
 
     def delete(self, table_name, where=None):
         """

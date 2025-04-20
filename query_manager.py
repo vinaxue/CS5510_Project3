@@ -49,13 +49,14 @@ class QueryManager:
 
         integer = Word(nums)
         float_literal = Combine(Optional(oneOf("+ -")) + Word(nums) + "." + Word(nums))
-        self.numeric_literal = float_literal | Combine(Optional(oneOf("+ -")) + integer)
+        self.numeric_literal = (float_literal | Combine(Optional(oneOf("+ -")) + integer)
+    )
         # self.numeric_literal = Combine(Optional(oneOf("+ -")) + integer)
         self.string_literal = quotedString.setParseAction(removeQuotes)
         self.constant = self.numeric_literal | self.string_literal
         self.numeric_literal.setParseAction(
-            lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
-        )
+        lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
+    )
 
         (
             self.SELECT,
@@ -291,83 +292,17 @@ class QueryManager:
 
         # Build the first (innermost) comparison function
         if op == "=":
-            funcs = [
-                lambda row, c=col, v=val: (
-                    float(row.get(c)) == v
-                    if isinstance(row.get(c), (int, float))
-                    and isinstance(v, (int, float))
-                    else (
-                        row.get(c) == v
-                        if isinstance(row.get(c), str) and isinstance(v, str)
-                        else False
-                    )
-                )
-            ]
+            funcs = [lambda row, c=col, v=val: row.get(c) == v]
         elif op == "!=":
-            funcs = [
-                lambda row, c=col, v=val: (
-                    float(row.get(c)) != v
-                    if isinstance(row.get(c), (int, float))
-                    and isinstance(v, (int, float))
-                    else (
-                        row.get(c) != v
-                        if isinstance(row.get(c), str) and isinstance(v, str)
-                        else False
-                    )
-                )
-            ]
+            funcs = [lambda row, c=col, v=val: row.get(c) != v]
         elif op == "<":
-            funcs = [
-                lambda row, c=col, v=val: (
-                    float(row.get(c)) < v
-                    if isinstance(row.get(c), (int, float))
-                    and isinstance(v, (int, float))
-                    else (
-                        row.get(c) < v
-                        if isinstance(row.get(c), str) and isinstance(v, str)
-                        else False
-                    )
-                )
-            ]
+            funcs = [lambda row, c=col, v=val: row.get(c) < v]
         elif op == ">":
-            funcs = [
-                lambda row, c=col, v=val: (
-                    float(row.get(c)) > v
-                    if isinstance(row.get(c), (int, float))
-                    and isinstance(v, (int, float))
-                    else (
-                        row.get(c) > v
-                        if isinstance(row.get(c), str) and isinstance(v, str)
-                        else False
-                    )
-                )
-            ]
+            funcs = [lambda row, c=col, v=val: row.get(c) > v]
         elif op == "<=":
-            funcs = [
-                lambda row, c=col, v=val: (
-                    float(row.get(c)) <= v
-                    if isinstance(row.get(c), (int, float))
-                    and isinstance(v, (int, float))
-                    else (
-                        row.get(c) <= v
-                        if isinstance(row.get(c), str) and isinstance(v, str)
-                        else False
-                    )
-                )
-            ]
+            funcs = [lambda row, c=col, v=val: row.get(c) <= v]
         elif op == ">=":
-            funcs = [
-                lambda row, c=col, v=val: (
-                    float(row.get(c)) >= v
-                    if isinstance(row.get(c), (int, float))
-                    and isinstance(v, (int, float))
-                    else (
-                        row.get(c) >= v
-                        if isinstance(row.get(c), str) and isinstance(v, str)
-                        else False
-                    )
-                )
-            ]
+            funcs = [lambda row, c=col, v=val: row.get(c) >= v]
         else:
             raise Exception(f"Unsupported operator: {op}")
 
@@ -414,6 +349,7 @@ class QueryManager:
         for parsed in parsed_queries:
             cmd = parsed[0].upper()
             where_tok = parsed.get("where")
+            print("DEBUG where_tok:", where_tok)
             base_where_fn = self._build_where_fn(where_tok) if where_tok else None
             # ----- CREATE -----
             if cmd == "CREATE":

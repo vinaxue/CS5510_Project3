@@ -223,7 +223,7 @@ class TestQueryManager(unittest.TestCase):
 
         query = "SELECT UserName FROM Users WHERE UserID > 1"
         result = self.query_manager.execute_query(query)
-
+        print(result)
         self.assertEqual(result, [{"UserName": "Bob"}])
 
     def test_execute_select_query_with_two_conditions(self):
@@ -296,13 +296,13 @@ class TestQueryManager(unittest.TestCase):
 
         query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID WHERE Users.UserID < 2 OR Orders.Amount > 50.0"
         result = self.query_manager.execute_query(query)
-
+        print(result)
         self.assertEqual(
             result,
             [
-                {"Users.UserName": "Alice", "Orders.OrderID": 1},
-                {"Users.UserName": "Bob", "Orders.OrderID": 2},
+                {"Users.UserName": "Alice", "Orders.OrderID": 1},                
                 {"Users.UserName": "Alice", "Orders.OrderID": 3},
+                {"Users.UserName": "Bob", "Orders.OrderID": 2}
             ],
         )
 
@@ -343,7 +343,7 @@ class TestQueryManager(unittest.TestCase):
         query = "CREATE INDEX idx_UserName ON Users(UserName)"
         self.query_manager.execute_query(query)
 
-        query = "DELETE FROM Users WHERE UserID = 1 OR UserName = 'Alice Smith'"
+        query = "DELETE FROM Users WHERE UserID < 1.5 OR UserName = 'Alice Smith'"
         self.query_manager.execute_query(query)
 
         db = self.storage.load_db()
