@@ -57,6 +57,16 @@ class QueryManager:
         self.numeric_literal.setParseAction(
         lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
     )
+        
+        self.ASC  = CaselessKeyword("ASC")
+        self.DESC = CaselessKeyword("DESC")
+        
+        order_spec = Group(
+            self.qualified_identifier("col")
+            + Optional(self.ASC("dir") | self.DESC("dir"))
+        )
+
+
 
         (
             self.SELECT,
@@ -122,9 +132,10 @@ class QueryManager:
         # Combine the WHERE keyword with the full recursive condition
         self.where_condition = Group(self.WHERE + self.condition)("where")
         # --- Multi-condition WHERE support ends ---
-
         self.group_by_clause = Group(self.GROUP + self.BY + self.column_list)
-        self.order_by_clause = Group(self.ORDER + self.BY + self.column_list)
+        self.order_by_clause = Group(
+            self.ORDER + self.BY + delimitedList(order_spec)("order_specs")
+        )
 
         self.select_stmt << (
             self.SELECT
@@ -487,8 +498,7 @@ if __name__ == "__main__":
     qm = QueryManager(stor_mgr, ddl_mgr, dml_mgr)
 
     multi_query = """
-    SELECT * FROM employees WHERE age >= 30 AND salary < 5000 OR department = 'Sales';
-    SELECT * FROM employees ORDER BY name;
+    SELECT * FROM employees ORDER BY name DESC, id ASC;
     """
 
     try:
@@ -500,62 +510,4 @@ if __name__ == "__main__":
     except Exception as e:
         print("解析错误:", e)
 
-    class QueryManagerTest:
-        def __init__(self):
-            self.identifier = Word(alphas, alphanums + "_")
-            self.qualified_identifier = Combine(
-                self.identifier + ZeroOrMore("." + self.identifier)
-            )
-            integer = Word(nums)
-            float_literal = Combine(
-                Optional(oneOf("+ -")) + Word(nums) + "." + Word(nums)
-            )
-            self.numeric_literal = float_literal | Combine(
-                Optional(oneOf("+ -")) + integer
-            )
-            self.string_literal = quotedString.setParseAction(removeQuotes)
-            self.constant = self.numeric_literal | self.string_literal
-            self.numeric_literal.setParseAction(
-                lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
-            )
-            self.SELECT, self.FROM, self.WHERE = map(
-                CaselessKeyword, "SELECT FROM WHERE".split()
-            )
-
-            self.simple_condition = Group(
-                self.qualified_identifier("left")
-                + oneOf("= > < >= <=")("operator")
-                + (self.constant | self.qualified_identifier)("right")
-            )
-            self.condition = Forward()
-            self.condition <<= self.simple_condition + ZeroOrMore(
-                (CaselessKeyword("AND") | CaselessKeyword("OR"))("logic")
-                + self.condition
-            )
-            self.where_condition = Group(self.WHERE + self.condition)("where")
-
-            self.select_stmt = Forward()
-            self.select_stmt <<= (
-                self.SELECT
-                + "*"
-                + self.FROM
-                + self.identifier("table")
-                + Optional(self.where_condition)
-            )
-            self.sql_stmt = self.select_stmt
-
-        def parse_query(self, sql):
-            return [self.sql_stmt.parseString(sql, parseAll=True)]
-
-    qm = QueryManagerTest()
-    tests = [
-        ("unquoted 1", "SELECT * FROM t WHERE col = 1"),
-        ("quoted '1'", "SELECT * FROM t WHERE col = '1'"),
-    ]
-
-    for desc, sql in tests:
-        parsed = qm.parse_query(sql)[0]
-        where = parsed.get("where")
-        cond = where[1]
-        literal = cond[2]
-        print(f"{desc}: literal={literal!r}, type={type(literal).__name__}")
+ 
