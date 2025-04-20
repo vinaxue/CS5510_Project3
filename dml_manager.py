@@ -1,7 +1,8 @@
 from collections import defaultdict
 from BTrees.OOBTree import OOBTree
 
-from utils import DOUBLE, INT, MAX, MIN, STRING, SUM, _make_where_fn
+from utils import DESC, DOUBLE, INT, MAX, MIN, STRING, SUM, _make_where_fn
+import utils
 
 
 class DMLManager:
@@ -117,37 +118,41 @@ class DMLManager:
         self.storage_manager.save_index()
 
     def select(
-    self, table_name, columns=None, where=None, group_by=None, aggregates=None
-):
+        self,
+        table_name,
+        columns=None,
+        where=None,
+        group_by=None,
+        aggregates=None,
+        order_by=None,
+    ):
         """
         Selects rows from a table based on optional filtering and aggregation.
         :param table_name: The name of the table.
         :param columns: List of columns to select. If None, selects all columns.
         :param where: None | list | dict | callable(row_dict)->bool
         :param group_by: List of columns to group by. If None, no grouping is applied.
-        :param aggregates: Dictionary of aggregate functions to apply.
+        :param aggregates: Dictionary of aggregate functions to apply, e.g., {"SUM": "column_name"}.
+        :param order_by: tuple of columns to order by, e.g., [("name", "ASC"), ("age", "DESC")].
         :return: A list of dictionaries representing the selected rows.
         """
         self.reload()
 
-       
         table_columns = self.db["COLUMNS"][table_name]
-        col_names     = list(table_columns.keys())
-        table_data    = self.db["DATA"][table_name]
-
+        col_names = list(table_columns.keys())
+        table_data = self.db["DATA"][table_name]
 
         if where is None:
             where_fn = lambda row: True
         elif callable(where):
-   
+
             where_fn = where
         else:
-           
+
             where_fn = _make_where_fn(where, col_names)
 
         results = []
 
-      
         filtered_rows = []
         for row_list in table_data:
             row_dict = {}
@@ -163,41 +168,52 @@ class DMLManager:
             if where_fn(row_dict):
                 filtered_rows.append(row_dict)
 
-    
+        # if group_by is None and aggregates is None:
+        #     for row in filtered_rows:
+        #         if columns:
+
+        #             results.append({col: row[col] for col in columns})
+        #         else:
+
+        #             results.append(row)
+        #     return results
+
+        # groups = defaultdict(list)
+        # for row in filtered_rows:
+        #     key = tuple(row[col] for col in group_by)
+        #     groups[key].append(row)
+
+        # for group_key, group_rows in groups.items():
+        #     result_row = {col: group_key[i] for i, col in enumerate(group_by)}
+        #     for agg_func, col in aggregates.items():
+        #         values = [r[col] for r in group_rows if r[col] is not None]
+        #         if not values:
+        #             result_row[col] = None
+        #         elif agg_func == MAX:
+        #             result_row[col] = max(values)
+        #         elif agg_func == MIN:
+        #             result_row[col] = min(values)
+        #         elif agg_func == SUM:
+        #             result_row[col] = sum(values)
+        #         else:
+        #             raise ValueError(f"Unsupported aggregate: {agg_func}")
+        #     results.append(result_row)
+
+        if columns:
+            filtered_rows = [
+                {col: row[col] for col in columns if col in row}
+                for row in filtered_rows
+            ]
+
         if group_by is None and aggregates is None:
-            for row in filtered_rows:
-                if columns:
-                 
-                    results.append({col: row[col] for col in columns})
-                else:
-                    
-                    results.append(row)
-            return results
+            results = filtered_rows
+        else:
+            results = utils.aggregation(filtered_rows, group_by, aggregates)
 
-   
-        groups = defaultdict(list)
-        for row in filtered_rows:
-            key = tuple(row[col] for col in group_by)
-            groups[key].append(row)
-
-        for group_key, group_rows in groups.items():
-            result_row = {col: group_key[i] for i, col in enumerate(group_by)}
-            for agg_func, col in aggregates.items():
-                values = [r[col] for r in group_rows if r[col] is not None]
-                if not values:
-                    result_row[col] = None
-                elif agg_func == MAX:
-                    result_row[col] = max(values)
-                elif agg_func == MIN:
-                    result_row[col] = min(values)
-                elif agg_func == SUM:
-                    result_row[col] = sum(values)
-                else:
-                    raise ValueError(f"Unsupported aggregate: {agg_func}")
-            results.append(result_row)
+        if order_by:
+            results = utils.order_by(filtered_rows, order_by)
 
         return results
-
 
     def delete(self, table_name, where=None):
         """
@@ -264,12 +280,16 @@ class DMLManager:
         data = self.db["DATA"][table_name]
         col_names = list(table_columns.keys())
         col_idx = {c: i for i, c in enumerate(col_names)}
+        primary_key = self.db["TABLES"][table_name].get("primary_key")
 
         # 2. Wrap `where` so that if it's a dict->bool function, we convert row list to dict
         where_fn = _make_where_fn(where, col_names)
 
         # 3. Perform updates
-        update_count = 0
+        # First pass — simulate new values, check for primary key duplicates
+        updated_pks = set()
+        existing_pks = {row[col_idx[primary_key]] for row in data}
+
         for idx, row in enumerate(data):
             if where_fn is None or where_fn(row):
                 new_row = row.copy()
@@ -279,7 +299,28 @@ class DMLManager:
                             f"Column '{col}' does not exist in table '{table_name}'"
                         )
                     ci = col_idx[col]
-                    # support callable(new_value) or constant
+                    new_row[ci] = (
+                        new_value(new_row[ci]) if callable(new_value) else new_value
+                    )
+
+                if primary_key:
+                    new_pk = new_row[col_idx[primary_key]]
+                    old_pk = row[col_idx[primary_key]]
+
+                    if new_pk != old_pk:
+                        if new_pk in existing_pks or new_pk in updated_pks:
+                            raise ValueError(
+                                f"Duplicate primary key '{new_pk}' after update."
+                            )
+                        updated_pks.add(new_pk)
+
+        # Second pass — actually apply updates
+        update_count = 0
+        for idx, row in enumerate(data):
+            if where_fn is None or where_fn(row):
+                new_row = row.copy()
+                for col, new_value in updates.items():
+                    ci = col_idx[col]
                     new_row[ci] = (
                         new_value(new_row[ci]) if callable(new_value) else new_value
                     )
@@ -321,6 +362,9 @@ class DMLManager:
         where=None,
         left_alias=None,
         right_alias=None,
+        order_by=None,
+        group_by=None,
+        aggregates=None,
     ):
         """
         Optimized SELECT JOIN: always iterate the smaller table, build index/hash on the larger.
@@ -384,8 +428,7 @@ class DMLManager:
         if inner_table in self.index and idx_col in self.index[inner_table]:
             btree = self.index[inner_table][idx_col]["tree"]
             inner_index = {
-                key: [inner_data[rid] for rid in btree[key]]
-                for key in btree
+                key: [inner_data[rid] for rid in btree[key]] for key in btree
             }
         else:
             inner_index = {}
@@ -423,5 +466,16 @@ class DMLManager:
                         if c in j:
                             row_out[c] = j[c]
                     results.append(row_out)
+
+        if columns:
+            results = [
+                {col: row[col] for col in columns if col in row} for row in results
+            ]
+
+        if group_by is not None and aggregates is not None:
+            results = utils.aggregation(results, group_by, aggregates)
+
+        if order_by:
+            results = utils.order_by(results, order_by)
 
         return results

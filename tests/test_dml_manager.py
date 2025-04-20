@@ -3,7 +3,7 @@ import unittest
 from storage_manager import StorageManager
 from ddl_manager import DDLManager
 from dml_manager import DMLManager
-from utils import DOUBLE, INT, MAX, MIN, STRING, SUM
+from utils import ASC, DESC, DOUBLE, INT, MAX, MIN, STRING, SUM
 
 
 class TestDMLManager(unittest.TestCase):
@@ -67,9 +67,7 @@ class TestDMLManager(unittest.TestCase):
     def test_insert_type_mismatch(self):
         """Test inserting a row with type mismatch"""
         with self.assertRaises(ValueError):
-            self.dml_manager.insert(
-                "users", ["not_an_int", "Alice", "alice@example.com"]
-            )
+            self.dml_manager.insert("users", ["1", "Alice", "alice@example.com"])
 
     def test_insert_updates_index(self):
         """Test that insert operation updates the index"""
@@ -105,7 +103,7 @@ class TestDMLManager(unittest.TestCase):
         self.assertEqual(results[0]["id"], 2)
 
     def test_select_with_two_conditions_and(self):
-        """Test selecting with a where condition"""
+        """Test selecting with where conditions"""
         self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
         self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
         self.dml_manager.insert("users", [3, "Charlie", "charlie@example.com"])
@@ -120,7 +118,7 @@ class TestDMLManager(unittest.TestCase):
         self.assertEqual(results[0]["name"], "Bob")
 
     def test_select_with_two_conditions_or(self):
-        """Test selecting with a where condition"""
+        """Test selecting with where conditions"""
         self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
         self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
         self.dml_manager.insert("users", [3, "Charlie", "charlie@example.com"])
@@ -194,6 +192,43 @@ class TestDMLManager(unittest.TestCase):
         self.assertEqual(results[0]["amount"], (99.99 + 49.99))
         self.assertEqual(results[1]["user_id"], 2)
         self.assertEqual(results[1]["amount"], 29.99)
+
+    def test_select_with_order_by(self):
+        """Test selecting with order by"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("orders", [102, 1, 49.99])
+        self.dml_manager.insert("orders", [103, 2, 29.99])
+        self.dml_manager.insert("orders", [104, 2, 199.99])
+
+        result = self.dml_manager.select(
+            "orders",
+            columns=["user_id", "amount"],
+            order_by=[("user_id", DESC)],
+        )
+        expected = [
+            {"user_id": 2, "amount": 29.99},
+            {"user_id": 2, "amount": 199.99},
+            {"user_id": 1, "amount": 99.99},
+            {"user_id": 1, "amount": 49.99},
+        ]
+
+        self.assertEqual(result, expected)
+
+        result = self.dml_manager.select(
+            "orders",
+            columns=["user_id", "amount"],
+            order_by=[("user_id", ASC), ("amount", DESC)],
+        )
+        expected = [
+            {"user_id": 1, "amount": 99.99},
+            {"user_id": 1, "amount": 49.99},
+            {"user_id": 2, "amount": 199.99},
+            {"user_id": 2, "amount": 29.99},
+        ]
+
+        self.assertEqual(result, expected)
 
     ########################## DELETE TESTS ##########################
     def test_delete_all_rows(self):
@@ -311,6 +346,18 @@ class TestDMLManager(unittest.TestCase):
         self.dml_manager.update("users", {"id": 10})
         self.assertNotIn(1, self.storage.index["users"]["id"]["tree"])
         self.assertIn(10, self.storage.index["users"]["id"]["tree"])
+
+    def test_update_with_duplicate_primary_key(self):
+        """Test updating a row with a duplicate primary key"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+
+        with self.assertRaises(ValueError):
+            self.dml_manager.update(
+                "users", {"id": 1}, where=lambda row: row["id"] == 2
+            )
+        self.assertEqual(self.storage.db["DATA"]["users"][0][0], 1)
+        self.assertEqual(self.storage.db["DATA"]["users"][1][0], 2)
 
     ########################## JOIN TESTS ##########################
     def test_select_join_with_index(self):
@@ -452,6 +499,61 @@ class TestDMLManager(unittest.TestCase):
             {"employees_L.name": "Bob", "employees_R.name": "Charlie"}, results
         )
         self.assertIn({"employees_L.name": "Bob", "employees_R.name": "David"}, results)
+
+    def test_select_join_with_group_by_and_aggregation(self):
+        """Test join with group by and aggregation"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("orders", [102, 1, 49.99])
+        self.dml_manager.insert("orders", [103, 2, 29.99])
+        self.dml_manager.insert("orders", [104, 2, 199.99])
+
+        results = self.dml_manager.select_join_with_index(
+            left_table="users",
+            right_table="orders",
+            left_join_col="id",
+            right_join_col="user_id",
+            columns=["users.name", "orders.amount"],
+            group_by=["users.name"],
+            aggregates={SUM: "orders.amount"},
+        )
+
+        expected = [
+            {"users.name": "Alice", "orders.amount": 149.98},
+            {"users.name": "Bob", "orders.amount": 229.98},
+        ]
+
+        self.assertEqual(len(results), 2)
+        self.assertIn(expected[0], results)
+        self.assertIn(expected[1], results)
+
+    def test_select_join_with_order_by(self):
+        """Test join with ordering results"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("orders", [102, 1, 49.99])
+        self.dml_manager.insert("orders", [103, 2, 29.99])
+        self.dml_manager.insert("orders", [104, 2, 199.99])
+
+        results = self.dml_manager.select_join_with_index(
+            left_table="users",
+            right_table="orders",
+            left_join_col="id",
+            right_join_col="user_id",
+            columns=["users.name", "orders.amount"],
+            order_by=[("orders.amount", DESC)],
+        )
+
+        expected = [
+            {"users.name": "Bob", "orders.amount": 199.99},
+            {"users.name": "Alice", "orders.amount": 99.99},
+            {"users.name": "Alice", "orders.amount": 49.99},
+            {"users.name": "Bob", "orders.amount": 29.99},
+        ]
+
+        self.assertEqual(results, expected)
 
 
 if __name__ == "__main__":

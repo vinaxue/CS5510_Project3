@@ -1,5 +1,17 @@
+from collections import defaultdict
 import time
 import functools
+
+STRING = "string"
+INT = "int"
+DOUBLE = "double"
+
+MAX = "max"
+MIN = "min"
+SUM = "sum"
+
+DESC = "desc"
+ASC = "asc"
 
 
 def track_time(func):
@@ -62,10 +74,41 @@ def _make_where_fn(where, col_names):
         raise ValueError(f"Unsupported where type: {where!r}")
 
 
-STRING = "string"
-INT = "int"
-DOUBLE = "double"
+def aggregation(results, group_by, aggregates):
+    """Performs aggregation on the results based on group_by and aggregates."""
+    groups = defaultdict(list)
+    for row in results:
+        key = tuple(row[col] for col in group_by)
+        groups[key].append(row)
 
-MAX = "max"
-MIN = "min"
-SUM = "sum"
+    aggregated_results = []
+
+    for group_key, group_rows in groups.items():
+        result_row = {col: group_key[i] for i, col in enumerate(group_by)}
+
+        for agg_func, col in aggregates.items():
+            values = [r[col] for r in group_rows if r[col] is not None]
+
+            if not values:
+                result_row[col] = None
+            elif agg_func == MAX:
+                result_row[col] = round(max(values), 2)
+            elif agg_func == MIN:
+                result_row[col] = round(min(values), 2)
+            elif agg_func == SUM:
+                result_row[col] = round(sum(values), 2)
+            else:
+                raise ValueError(f"Unsupported aggregate: {agg_func}")
+
+        aggregated_results.append(result_row)
+
+    return aggregated_results
+
+
+def order_by(results, order_by):
+    """Sorts the results based on the specified order_by criteria."""
+    for col, direction in reversed(order_by):  # reversed for stable multi-key sort
+        reverse = str(direction).upper() == "DESC"
+        results.sort(key=lambda row: row.get(col), reverse=reverse)
+
+    return results
