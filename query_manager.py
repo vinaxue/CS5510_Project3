@@ -15,6 +15,7 @@ from pyparsing import (
     Combine,
     OneOrMore,
     ZeroOrMore,
+    Literal,   
 )
 
 from ddl_manager import DDLManager
@@ -60,6 +61,18 @@ class QueryManager:
         self.ASC = CaselessKeyword("ASC")
         self.DESC = CaselessKeyword("DESC")
 
+        star = Literal("*").setName("star")
+        agg_func = Group(
+            (CaselessKeyword("MIN") 
+            | CaselessKeyword("MAX")
+            | CaselessKeyword("SUM") 
+            | CaselessKeyword("AVG")
+            | CaselessKeyword("COUNT"))("func")
+            + Suppress("(")
+            + (self.qualified_identifier | star)("col")
+            + Suppress(")")
+        ).setResultsName("agg")
+
         order_spec = Group(
             self.qualified_identifier("col")
             + Optional(self.ASC("dir") | self.DESC("dir"))
@@ -88,11 +101,12 @@ class QueryManager:
             self.DELETE,
             self.UPDATE,
             self.SET,
+            self.HAVING,
         ) = map(
             CaselessKeyword,
             """
             SELECT FROM WHERE GROUP BY ORDER INSERT INTO VALUES JOIN ON
-            CREATE DROP INDEX TABLE PRIMARY KEY FOREIGN REFERENCES DELETE UPDATE SET
+            CREATE DROP INDEX TABLE PRIMARY KEY FOREIGN REFERENCES DELETE UPDATE SET HAVING
             """.split(),
         )
 
@@ -115,12 +129,14 @@ class QueryManager:
         self.condition = Forward()
 
         # Define a single simple condition: qualified_identifier operator (constant | qualified_identifier)
-        self.simple_condition = Group(
-            self.qualified_identifier("left")
-            + oneOf("= > < >= <=")("operator")
-            + (self.constant | self.qualified_identifier)("right")
-        )
+        identifier_or_agg = agg_func | self.qualified_identifier
+        value_expr       = self.constant | identifier_or_agg
 
+        self.simple_condition = Group(
+            identifier_or_agg("left")
+        + oneOf("= > < >= <=")("operator")
+        + value_expr("right")
+        )
         # Allow chaining of simple_condition via AND/OR recursively
         self.condition <<= self.simple_condition + ZeroOrMore(
             (CaselessKeyword("AND") | CaselessKeyword("OR"))("logic") + self.condition
@@ -130,17 +146,26 @@ class QueryManager:
         self.where_condition = Group(self.WHERE + self.condition)("where")
         # --- Multi-condition WHERE support ends ---
         self.group_by_clause = Group(self.GROUP + self.BY + self.column_list)
+        self.having_clause = Group(
+            self.HAVING + self.condition
+        ).setResultsName("having")
         self.order_by_clause = Group(
             self.ORDER + self.BY + delimitedList(order_spec)("order_specs")
         )
 
+        select_list = (
+            Group(delimitedList(agg_func | self.qualified_identifier))("select_cols")
+            | "*"
+        )
+
         self.select_stmt << (
             self.SELECT
-            + (Group(delimitedList(self.qualified_identifier)) | "*")
+            + select_list
             + self.FROM
             + self.table_with_joins
             + Optional(self.where_condition)
             + Optional(self.group_by_clause)
+            + Optional(self.having_clause)
             + Optional(self.order_by_clause)
         )
 
@@ -510,7 +535,8 @@ if __name__ == "__main__":
     qm = QueryManager(stor_mgr, ddl_mgr, dml_mgr)
 
     multi_query = """
-    SELECT * FROM employees ORDER BY name DESC, id ASC;
+    SELECT dept, MIN(salary), count(*) FROM employees WHERE age > 30 GROUP BY dept HAVING MIN(salary) > 5000 and MAX(age) < 60;
+ ;
     """
 
     try:
