@@ -75,6 +75,44 @@ class TestDMLManager(unittest.TestCase):
         index = self.storage.load_index()
         self.assertIn(1, index["users"]["id"]["tree"])
 
+    def test_insert_with_foreign_key(self):
+        """Test inserting a row with foreign key reference"""
+        self.ddl_manager.create_table(
+            "products_2",
+            [("product_id", INT), ("name", STRING), ("price", INT)],
+            primary_key="product_id",
+        )
+        self.ddl_manager.create_table(
+            "order_items",
+            [("order_item_id", INT), ("order_id", INT), ("product_id", INT)],
+            primary_key="order_item_id",
+            foreign_keys=[("product_id", "products_2", "product_id")],
+        )
+        self.dml_manager.insert("products_2", [1, "Product A", 100])
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("order_items", [201, 101, 1])
+
+        data = self.storage.db["DATA"]["order_items"]
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0], [201, 101, 1])
+
+    def test_insert_with_invalid_foreign_key(self):
+        """Test inserting a row with invalid foreign key reference"""
+        self.ddl_manager.create_table(
+            "products_2",
+            [("product_id", INT), ("name", STRING), ("price", INT)],
+            primary_key="product_id",
+        )
+        self.ddl_manager.create_table(
+            "order_items",
+            [("order_item_id", INT), ("order_id", INT), ("product_id", INT)],
+            primary_key="order_item_id",
+            foreign_keys=[("product_id", "products_2", "product_id")],
+        )
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        with self.assertRaises(ValueError):
+            self.dml_manager.insert("order_items", [201, 101, 999])
+
     ########################## SELECT TESTS ##########################
     def test_select_all_columns(self):
         """Test selecting all columns"""
