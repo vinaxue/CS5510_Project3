@@ -307,9 +307,9 @@ class TestQueryManager(unittest.TestCase):
         self.assertEqual(
             result,
             [
-                {"Users.UserName": "Alice", "Orders.OrderID": 1},                
+                {"Users.UserName": "Alice", "Orders.OrderID": 1},
                 {"Users.UserName": "Alice", "Orders.OrderID": 3},
-                {"Users.UserName": "Bob", "Orders.OrderID": 2}
+                {"Users.UserName": "Bob", "Orders.OrderID": 2},
             ],
         )
 
@@ -321,9 +321,104 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(2, "2023-10-02", 200.0, 1)
         self.insert_order(3, "2023-10-03", 50.0, 1)
         self.insert_order(4, "2023-10-04", 150.0, 1)
+        self.insert_order(5, "2023-10-05", 50.0, 1)
 
         query = "SELECT * FROM Orders ORDER BY Amount DESC"
-        # result = self.query_manager.execute_query(query)
+        result = self.query_manager.execute_query(query)
+
+        expected_result = [
+            {
+                "OrderID": 2,
+                "OrderDate": "2023-10-02",
+                "Amount": 200.0,
+                "UserID": 1,
+            },
+            {
+                "OrderID": 4,
+                "OrderDate": "2023-10-04",
+                "Amount": 150.0,
+                "UserID": 1,
+            },
+            {
+                "OrderID": 1,
+                "OrderDate": "2023-10-01",
+                "Amount": 100.0,
+                "UserID": 1,
+            },
+            {
+                "OrderID": 3,
+                "OrderDate": "2023-10-03",
+                "Amount": 50.0,
+                "UserID": 1,
+            },
+            {
+                "OrderID": 5,
+                "OrderDate": "2023-10-05",
+                "Amount": 50.0,
+                "UserID": 1,
+            },
+        ]
+        self.assertEqual(result, expected_result)
+
+        query = "SELECT * FROM Orders ORDER BY Amount ASC, OrderID DESC"
+        result = self.query_manager.execute_query(query)
+
+        expected_result = [
+            {
+                "OrderID": 5,
+                "OrderDate": "2023-10-05",
+                "Amount": 50.0,
+                "UserID": 1,
+            },
+            {
+                "OrderID": 3,
+                "OrderDate": "2023-10-03",
+                "Amount": 50.0,
+                "UserID": 1,
+            },
+            {
+                "OrderID": 1,
+                "OrderDate": "2023-10-01",
+                "Amount": 100.0,
+                "UserID": 1,
+            },
+            {
+                "OrderID": 4,
+                "OrderDate": "2023-10-04",
+                "Amount": 150.0,
+                "UserID": 1,
+            },
+            {
+                "OrderID": 2,
+                "OrderDate": "2023-10-02",
+                "Amount": 200.0,
+                "UserID": 1,
+            },
+        ]
+        self.assertEqual(result, expected_result)
+
+    def test_execute_select_join_with_order_by(self):
+        """Test join with ordering results"""
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.setup_table_orders()
+        self.insert_order(101, "2023-10-01", 99.99, 1)
+        self.insert_order(102, "2023-10-02", 49.99, 1)
+        self.insert_order(103, "2023-10-03", 29.99, 2)
+        self.insert_order(104, "2023-10-04", 199.99, 2)
+
+        query = "SELECT Users.UserName, Orders.Amount FROM Users JOIN Orders ON Users.UserID = Orders.UserID ORDER BY Orders.Amount DESC"
+        results = self.query_manager.execute_query(query)
+
+        expected = [
+            {"Users.UserName": "Bob", "Orders.Amount": 199.99},
+            {"Users.UserName": "Alice", "Orders.Amount": 99.99},
+            {"Users.UserName": "Alice", "Orders.Amount": 49.99},
+            {"Users.UserName": "Bob", "Orders.Amount": 29.99},
+        ]
+
+        self.assertEqual(results, expected)
 
     ############################### UPDATE ##########################
     def test_execute_update_query(self):

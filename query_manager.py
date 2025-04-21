@@ -49,24 +49,21 @@ class QueryManager:
 
         integer = Word(nums)
         float_literal = Combine(Optional(oneOf("+ -")) + Word(nums) + "." + Word(nums))
-        self.numeric_literal = (float_literal | Combine(Optional(oneOf("+ -")) + integer)
-    )
+        self.numeric_literal = float_literal | Combine(Optional(oneOf("+ -")) + integer)
         # self.numeric_literal = Combine(Optional(oneOf("+ -")) + integer)
         self.string_literal = quotedString.setParseAction(removeQuotes)
         self.constant = self.numeric_literal | self.string_literal
         self.numeric_literal.setParseAction(
-        lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
-    )
-        
-        self.ASC  = CaselessKeyword("ASC")
+            lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
+        )
+
+        self.ASC = CaselessKeyword("ASC")
         self.DESC = CaselessKeyword("DESC")
-        
+
         order_spec = Group(
             self.qualified_identifier("col")
             + Optional(self.ASC("dir") | self.DESC("dir"))
         )
-
-
 
         (
             self.SELECT,
@@ -360,7 +357,6 @@ class QueryManager:
         for parsed in parsed_queries:
             cmd = parsed[0].upper()
             where_tok = parsed.get("where")
-            print("DEBUG where_tok:", where_tok)
             base_where_fn = self._build_where_fn(where_tok) if where_tok else None
             # ----- CREATE -----
             if cmd == "CREATE":
@@ -431,6 +427,20 @@ class QueryManager:
                 where_tok = parsed.get("where")
                 where_fn = self._build_where_fn(where_tok) if where_tok else None
 
+                # Get order by tuples
+                order_tok = None
+                order_tuples = None
+                for tok in parsed:
+                    if (
+                        len(tok) >= 2
+                        and tok[0].upper() == "ORDER"
+                        and tok[1].upper() == "BY"
+                    ):
+                        order_tok = tok
+                        break
+                if order_tok:
+                    order_tuples = order_tok[2:]
+
                 # Check for JOIN
                 if len(from_clause) > 1:
                     join = from_clause[1]
@@ -445,12 +455,14 @@ class QueryManager:
                         right_join_col=right_col,
                         columns=cols,
                         where=where_fn,
+                        order_by=order_tuples,
                     )
                 else:
                     result = self.dml_manager.select(
                         table_name=left_tbl,
                         columns=cols,
                         where=where_fn,
+                        order_by=order_tuples,
                     )
                 return result
 
@@ -509,5 +521,3 @@ if __name__ == "__main__":
             print("-" * 50)
     except Exception as e:
         print("解析错误:", e)
-
- 

@@ -142,13 +142,9 @@ class DMLManager:
         col_names = list(table_columns.keys())
         table_data = self.db["DATA"][table_name]
 
-        if where is None:
-            where_fn = lambda row: True
-        elif callable(where):
-
+        if callable(where):
             where_fn = where
         else:
-
             where_fn = _make_where_fn(where, col_names)
 
         results = []
@@ -167,37 +163,6 @@ class DMLManager:
 
             if where_fn(row_dict):
                 filtered_rows.append(row_dict)
-
-        # if group_by is None and aggregates is None:
-        #     for row in filtered_rows:
-        #         if columns:
-
-        #             results.append({col: row[col] for col in columns})
-        #         else:
-
-        #             results.append(row)
-        #     return results
-
-        # groups = defaultdict(list)
-        # for row in filtered_rows:
-        #     key = tuple(row[col] for col in group_by)
-        #     groups[key].append(row)
-
-        # for group_key, group_rows in groups.items():
-        #     result_row = {col: group_key[i] for i, col in enumerate(group_by)}
-        #     for agg_func, col in aggregates.items():
-        #         values = [r[col] for r in group_rows if r[col] is not None]
-        #         if not values:
-        #             result_row[col] = None
-        #         elif agg_func == MAX:
-        #             result_row[col] = max(values)
-        #         elif agg_func == MIN:
-        #             result_row[col] = min(values)
-        #         elif agg_func == SUM:
-        #             result_row[col] = sum(values)
-        #         else:
-        #             raise ValueError(f"Unsupported aggregate: {agg_func}")
-        #     results.append(result_row)
 
         if columns:
             filtered_rows = [
