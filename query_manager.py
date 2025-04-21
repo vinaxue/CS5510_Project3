@@ -20,7 +20,7 @@ from pyparsing import (
 from ddl_manager import DDLManager
 from dml_manager import DMLManager
 from storage_manager import StorageManager
-from utils import track_time
+from utils import ASC, DESC, track_time
 import time
 from functools import wraps
 
@@ -47,15 +47,21 @@ class QueryManager:
             self.identifier + ZeroOrMore("." + self.identifier)
         )
 
-        integer = Word(nums)
-        float_literal = Combine(Optional(oneOf("+ -")) + Word(nums) + "." + Word(nums))
+        integer = Word(nums).setParseAction(lambda t: int(t[0]))
+        float_literal = Combine(
+            Optional(oneOf("+ -")) + Word(nums) + "." + Word(nums)
+        ).setParseAction(lambda t: float(t[0]))
         self.numeric_literal = float_literal | Combine(Optional(oneOf("+ -")) + integer)
         # self.numeric_literal = Combine(Optional(oneOf("+ -")) + integer)
         self.string_literal = quotedString.setParseAction(removeQuotes)
-        self.constant = self.numeric_literal | self.string_literal
-        self.numeric_literal.setParseAction(
-            lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
-        )
+        # self.constant = self.numeric_literal | self.string_literal
+        # self.numeric_literal.setParseAction(
+        #     lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
+        # )
+        self.constant = float_literal | integer | self.string_literal
+        # .setParseAction(
+        #     lambda t: print(f"[CONSTANT PARSED]: {t[0]} ({type(t[0])})") or t
+        # )
 
         self.ASC = CaselessKeyword("ASC")
         self.DESC = CaselessKeyword("DESC")
@@ -289,14 +295,15 @@ class QueryManager:
 
         # Extract column, operator, raw value
         col, op, raw = simple[0], simple[1], simple[2]
+        val = raw
         # Convert raw literal to int/float if possible
-        try:
-            val = int(raw)
-        except:
-            try:
-                val = float(raw)
-            except:
-                val = raw
+        # try:
+        #     val = int(raw)
+        # except:
+        #     try:
+        #         val = float(raw)
+        #     except:
+        #         val = raw
 
         # Build the first (innermost) comparison function
         if op == "=":
@@ -405,15 +412,18 @@ class QueryManager:
             if cmd == "INSERT":
                 tbl = parsed[2]
                 raw_vals = parsed.get("values") or []
-                # Convert to int/float if possible
                 vals = []
                 for v in raw_vals:
-                    if isinstance(v, str) and v.isdigit():
-                        vals.append(int(v))
-                    elif isinstance(v, str) and v.replace(".", "", 1).isdigit():
-                        vals.append(float(v))
-                    else:
-                        vals.append(v)
+                    vals.append(v)
+                # # Convert to int/float if possible
+                # vals = []
+                # for v in raw_vals:
+                #     if isinstance(v, str) and v.isdigit():
+                #         vals.append(int(v))
+                #     elif isinstance(v, str) and v.replace(".", "", 1).isdigit():
+                #         vals.append(float(v))
+                #     else:
+                #         vals.append(v)
                 self.dml_manager.insert(tbl, vals)
                 continue
 
@@ -439,7 +449,23 @@ class QueryManager:
                         order_tok = tok
                         break
                 if order_tok:
-                    order_tuples = order_tok[2:]
+                    order_tuples = [
+                        (col, DESC if direction.upper() == "DESC" else ASC)
+                        for col, direction in order_tok[2:]
+                    ]
+
+                # Get group by
+                group_tok = None
+                for tok in parsed:
+                    if (
+                        len(tok) >= 2
+                        and tok[0].upper() == "GROUP"
+                        and tok[1].upper() == "BY"
+                    ):
+                        group_tok = tok
+                        break
+                if group_tok:
+                    ...
 
                 # Check for JOIN
                 if len(from_clause) > 1:
@@ -510,7 +536,7 @@ if __name__ == "__main__":
     qm = QueryManager(stor_mgr, ddl_mgr, dml_mgr)
 
     multi_query = """
-    SELECT * FROM employees ORDER BY name DESC, id ASC;
+    SELECT * FROM employees WHERE age > 30;
     """
 
     try:
@@ -518,6 +544,7 @@ if __name__ == "__main__":
         for i, res in enumerate(parse_results, start=1):
             print(f"语句 {i} 解析成功:")
             print(res)
+            print(type(res[4][1][2]))
             print("-" * 50)
     except Exception as e:
         print("解析错误:", e)
