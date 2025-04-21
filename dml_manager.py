@@ -20,15 +20,17 @@ class DMLManager:
 
     def insert(self, table_name, row):
         """
-        Inserts a new row into the specified table, checking for duplicate entries
-        and verifying that each value matches the expected column type.
+        Inserts a new row into the specified table, checking for duplicate entries,
+        verifying that each value matches the expected column type, and ensuring
+        foreign key references exist.
         Supports types: int, string, and double (float).
         Optimized using the primary key index if available.
 
         :param table_name: The name of the table.
         :param row: A list representing a row of data.
         :raises ValueError: If the table does not exist, row length is incorrect,
-                            a duplicate primary key is found, or a column's type does not match.
+                            a duplicate primary key is found, a column's type does not match,
+                            or a foreign key reference does not exist.
         """
         self.reload()
 
@@ -48,6 +50,8 @@ class DMLManager:
         table_columns_items = list(self.db["COLUMNS"][table_name].items())
         # Check that each value's type matches the column's expected type
         for i, (col_name, col_type) in enumerate(table_columns_items):
+            if row[i] is None:
+                continue
             if col_type == INT:
                 if not isinstance(row[i], int):
                     raise ValueError(
@@ -96,6 +100,42 @@ class DMLManager:
                             f"Duplicate entry for primary key '{primary_key}' with value '{pk_value}'."
                         )
 
+        # Check foreign key references if defined
+        if "foreign_keys" in table_def:
+            foreign_keys = table_def["foreign_keys"]
+            for ref in foreign_keys:
+                col_name = ref[0]  # column name
+                ref_table = ref[1]  # referenced table
+                ref_col = ref[2]  # referenced column
+                try:
+                    fk_index = col_names.index(col_name)
+                except ValueError:
+                    raise ValueError(
+                        f"Foreign key column '{col_name}' is not defined in the table columns."
+                    )
+                fk_value = row[fk_index]
+                # Skip validation if the value is None
+                if fk_value is None:
+                    continue
+                # Validate that the referenced value exists in the referenced table
+                if ref_table not in self.db["TABLES"]:
+                    raise ValueError(
+                        f"Referenced table '{ref_table}' for foreign key '{col_name}' does not exist."
+                    )
+                ref_table_data = self.db["DATA"][ref_table]
+                ref_table_columns = self.db["COLUMNS"][ref_table]
+                try:
+                    ref_col_index = list(ref_table_columns.keys()).index(ref_col)
+                except ValueError:
+                    raise ValueError(
+                        f"Referenced column '{col_name}' in table '{ref_table}' does not exist."
+                    )
+                if not any(row[ref_col_index] == fk_value for row in ref_table_data):
+                    raise ValueError(
+                        f"Foreign key constraint violation: value '{fk_value}' in column '{col_name}' "
+                        f"does not exist in referenced table '{ref_table}', column '{ref_col}'."
+                    )
+
         # Append the new row
         self.db["DATA"][table_name].append(row)
         new_row_id = len(self.db["DATA"][table_name]) - 1
@@ -124,6 +164,7 @@ class DMLManager:
         where=None,
         group_by=None,
         aggregates=None,
+        having=None,
         order_by=None,
     ):
         """
@@ -132,6 +173,7 @@ class DMLManager:
         :param columns: List of columns to select. If None, selects all columns.
         :param where: None | list | dict | callable(row_dict)->bool
         :param group_by: List of columns to group by. If None, no grouping is applied.
+        :param having: Optional filtering condition after aggregation. Same types as `where`.
         :param aggregates: Dictionary of aggregate functions to apply, e.g., {"SUM": "column_name"}.
         :param order_by: tuple of columns to order by, e.g., [("name", "ASC"), ("age", "DESC")].
         :return: A list of dictionaries representing the selected rows.
@@ -174,6 +216,12 @@ class DMLManager:
             results = filtered_rows
         else:
             results = utils.aggregation(filtered_rows, group_by, aggregates)
+            if having:
+                if callable(having):
+                    having_fn = having
+                else:
+                    having_fn = _make_where_fn(having, col_names)
+                results = [row for row in results if having_fn(row)]
 
         if order_by:
             results = utils.order_by(filtered_rows, order_by)
@@ -329,6 +377,7 @@ class DMLManager:
         right_alias=None,
         order_by=None,
         group_by=None,
+        having=None,
         aggregates=None,
     ):
         """
@@ -439,6 +488,12 @@ class DMLManager:
 
         if group_by is not None and aggregates is not None:
             results = utils.aggregation(results, group_by, aggregates)
+            if having:
+                if callable(having):
+                    having_fn = having
+                else:
+                    having_fn = _make_where_fn(having, outer_cols + inner_cols)
+                results = [row for row in results if having_fn(row)]
 
         if order_by:
             results = utils.order_by(results, order_by)

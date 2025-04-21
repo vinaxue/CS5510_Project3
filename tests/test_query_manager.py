@@ -420,6 +420,20 @@ class TestQueryManager(unittest.TestCase):
 
         self.assertEqual(results, expected)
 
+    def test_execute_select_with_aggregation(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.setup_table_orders()
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 1)
+        self.insert_order(3, "2023-10-03", 50.0, 2)
+
+        query = "SELECT UserID, SUM(Amount) AS TotalAmount FROM Orders GROUP BY UserID"
+        result = self.query_manager.execute_query(query)
+
+        self.assertEqual(len(result), 2)
+
     ############################### UPDATE ##########################
     def test_execute_update_query(self):
         self.setup_table_users()

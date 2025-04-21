@@ -75,6 +75,44 @@ class TestDMLManager(unittest.TestCase):
         index = self.storage.load_index()
         self.assertIn(1, index["users"]["id"]["tree"])
 
+    def test_insert_with_foreign_key(self):
+        """Test inserting a row with foreign key reference"""
+        self.ddl_manager.create_table(
+            "products_2",
+            [("product_id", INT), ("name", STRING), ("price", INT)],
+            primary_key="product_id",
+        )
+        self.ddl_manager.create_table(
+            "order_items",
+            [("order_item_id", INT), ("order_id", INT), ("product_id", INT)],
+            primary_key="order_item_id",
+            foreign_keys=[("product_id", "products_2", "product_id")],
+        )
+        self.dml_manager.insert("products_2", [1, "Product A", 100])
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("order_items", [201, 101, 1])
+
+        data = self.storage.db["DATA"]["order_items"]
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0], [201, 101, 1])
+
+    def test_insert_with_invalid_foreign_key(self):
+        """Test inserting a row with invalid foreign key reference"""
+        self.ddl_manager.create_table(
+            "products_2",
+            [("product_id", INT), ("name", STRING), ("price", INT)],
+            primary_key="product_id",
+        )
+        self.ddl_manager.create_table(
+            "order_items",
+            [("order_item_id", INT), ("order_id", INT), ("product_id", INT)],
+            primary_key="order_item_id",
+            foreign_keys=[("product_id", "products_2", "product_id")],
+        )
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        with self.assertRaises(ValueError):
+            self.dml_manager.insert("order_items", [201, 101, 999])
+
     ########################## SELECT TESTS ##########################
     def test_select_all_columns(self):
         """Test selecting all columns"""
@@ -229,6 +267,29 @@ class TestDMLManager(unittest.TestCase):
         ]
 
         self.assertEqual(result, expected)
+
+    def test_select_with_aggregation_and_having(self):
+        """Test selecting with group by and having"""
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("orders", [102, 1, 49.99])
+        self.dml_manager.insert("orders", [103, 2, 49.99])
+        self.dml_manager.insert("orders", [104, 2, 29.99])
+        self.dml_manager.insert("orders", [105, 3, 19.99])
+        self.dml_manager.insert("orders", [106, 3, 29.99])
+
+        results = self.dml_manager.select(
+            "orders",
+            columns=["user_id", "amount"],
+            group_by=["user_id"],
+            aggregates={SUM: "amount"},
+            having=lambda row: row["amount"] > 50,
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["user_id"], 1)
+        self.assertEqual(results[0]["amount"], (99.99 + 49.99))
+        self.assertEqual(results[1]["user_id"], 2)
+        self.assertEqual(results[1]["amount"], (49.99 + 29.99))
 
     ########################## DELETE TESTS ##########################
     def test_delete_all_rows(self):
@@ -479,7 +540,7 @@ class TestDMLManager(unittest.TestCase):
             primary_key="emp_id",
             foreign_keys=[("manager_id", "employees", "emp_id")],
         )
-        self.dml_manager.insert("employees", [1, "Alice", "alice.example.com", 0])
+        self.dml_manager.insert("employees", [1, "Alice", "alice.example.com", None])
         self.dml_manager.insert("employees", [2, "Bob", "bob@example.com", 1])
         self.dml_manager.insert("employees", [3, "Charlie", "charlie@example.com", 2])
         self.dml_manager.insert("employees", [4, "David", "david@example.com", 2])
@@ -554,6 +615,33 @@ class TestDMLManager(unittest.TestCase):
         ]
 
         self.assertEqual(results, expected)
+
+    def test_select_join_with_group_by_and_aggregation_and_having(self):
+        """Test join with group by and aggregation and having"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("orders", [102, 1, 49.99])
+        self.dml_manager.insert("orders", [103, 2, 29.99])
+        self.dml_manager.insert("orders", [104, 2, 199.99])
+
+        results = self.dml_manager.select_join_with_index(
+            left_table="users",
+            right_table="orders",
+            left_join_col="id",
+            right_join_col="user_id",
+            columns=["users.name", "orders.amount"],
+            group_by=["users.name"],
+            aggregates={SUM: "orders.amount"},
+            having=lambda row: row["orders.amount"] > 150,
+        )
+
+        expected = [
+            {"users.name": "Bob", "orders.amount": 229.98},
+        ]
+
+        self.assertEqual(len(results), 1)
+        self.assertIn(expected[0], results)
 
 
 if __name__ == "__main__":
