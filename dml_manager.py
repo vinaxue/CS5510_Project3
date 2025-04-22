@@ -180,6 +180,10 @@ class DMLManager:
         """
         self.reload()
 
+        # Validate table existence
+        if table_name not in self.db["TABLES"]:
+            raise ValueError(f"Table '{table_name}' does not exist")
+
         table_columns = self.db["COLUMNS"][table_name]
         col_names = list(table_columns.keys())
         table_data = self.db["DATA"][table_name]

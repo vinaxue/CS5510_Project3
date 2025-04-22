@@ -105,6 +105,9 @@ def aggregation_fn(agg_func, values):
 def aggregation(rows, aggregates, group_by=None):
     aggregated_results = []
 
+    if len(rows) == 0:
+        return aggregated_results
+
     if isinstance(rows, defaultdict):
         for group_key, row in rows.items():
             result_row = {}

@@ -42,8 +42,12 @@ function Interface() {
                 setResult(response.data.result);
                 setRuntime(response.data.runtime);
             }
-        } catch (err) {
-            setError("Request failed: " + err.message);
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response) {
+                setError(error.response.data.detail);
+            } else {
+                setError("An unexpected error occurred");
+            }
         } finally {
             setLoading(false);
         }
@@ -202,6 +206,12 @@ function Interface() {
                                 </div>
                             </Card.Body>
                         </Card>
+                    )}
+
+                    {result && result.length === 0 && (
+                        <Alert variant="info" className="mt-4">
+                            No results found.
+                        </Alert>
                     )}
                 </Col>
             </Row>

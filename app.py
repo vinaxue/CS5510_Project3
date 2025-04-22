@@ -33,7 +33,13 @@ class QueryRequest(BaseModel):
 @app.post("/query")
 async def execute_query(data: QueryRequest):
     try:
-        res, runtime = query_manager.execute_query(data.query)
-        return {"result": res, "runtime": runtime}
+        queries = data.query.split(";")
+        last_res, total_runtime = None, 0
+        for query in queries:
+            if query.strip():  # Skip empty queries
+                last_res, runtime = query_manager.execute_query(query.strip())
+                total_runtime += runtime
+        return {"result": last_res, "runtime": total_runtime}
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=400, detail=str(e))
