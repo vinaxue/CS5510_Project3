@@ -185,6 +185,16 @@ class DMLManager:
             raise ValueError(f"Table '{table_name}' does not exist")
 
         table_columns = self.db["COLUMNS"][table_name]
+
+        # Validate columns exist
+        if columns:
+            table_columns_set = set(table_columns.keys())
+            for col in columns:
+                if col not in table_columns_set:
+                    raise ValueError(
+                        f"Column '{col}' does not exist in table '{table_name}'."
+                    )
+
         col_names = list(table_columns.keys())
         table_data = self.db["DATA"][table_name]
 
@@ -407,6 +417,16 @@ class DMLManager:
 
         if left_table not in self.db["TABLES"] or right_table not in self.db["TABLES"]:
             raise ValueError("One or both tables do not exist.")
+
+        # Validate that the join columns exist in their respective tables
+        if left_join_col not in self.db["COLUMNS"][left_table]:
+            raise ValueError(
+                f"Column '{left_join_col}' does not exist in table '{left_table}'."
+            )
+        if right_join_col not in self.db["COLUMNS"][right_table]:
+            raise ValueError(
+                f"Column '{right_join_col}' does not exist in table '{right_table}'."
+            )
 
         if left_alias is None or right_alias is None:
             if left_table == right_table:

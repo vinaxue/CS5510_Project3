@@ -263,7 +263,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_user(1, "Alice", "alice@example.com")
 
         query = "SELECT * FROM Users"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         self.assertEqual(
             result, [{"UserID": 1, "UserName": "Alice", "Email": "alice@example.com"}]
@@ -275,7 +275,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_user(2, "Bob", "bob@example.com")
 
         query = "SELECT UserName FROM Users WHERE UserID > 1"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
         # print(result)
         self.assertEqual(result, [{"UserName": "Bob"}])
 
@@ -286,12 +286,12 @@ class TestQueryManager(unittest.TestCase):
         self.insert_user(3, "Charlie", "charlie@example.com")
 
         query = "SELECT UserName FROM Users WHERE UserID < 2 OR UserName = 'Bob'"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         self.assertEqual(result, [{"UserName": "Alice"}, {"UserName": "Bob"}])
 
         query = "SELECT UserName FROM Users WHERE UserID < 3 AND UserID > 1"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         self.assertEqual(result, [{"UserName": "Bob"}])
 
@@ -304,7 +304,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(2, "2023-10-02", 200.0, 2)
 
         query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         self.assertEqual(
             result,
@@ -323,7 +323,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(2, "2023-10-02", 200.0, 2)
 
         query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID WHERE Users.UserID < 2 and Orders.OrderID = 1"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         self.assertEqual(
             result,
@@ -340,7 +340,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(3, "2023-10-03", 10.0, 1)
 
         query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID WHERE Users.UserID < 2 AND Orders.Amount > 50.0"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         self.assertEqual(
             result,
@@ -348,7 +348,7 @@ class TestQueryManager(unittest.TestCase):
         )
 
         query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID WHERE Users.UserID < 2 OR Orders.Amount > 50.0"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
         # print(result)
         self.assertEqual(
             result,
@@ -370,7 +370,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(5, "2023-10-05", 50.0, 1)
 
         query = "SELECT * FROM Orders ORDER BY Amount DESC"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         expected_result = [
             {
@@ -407,7 +407,7 @@ class TestQueryManager(unittest.TestCase):
         self.assertEqual(result, expected_result)
 
         query = "SELECT * FROM Orders ORDER BY Amount ASC, OrderID DESC"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         expected_result = [
             {
@@ -455,7 +455,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(104, "2023-10-04", 199.99, 2)
 
         query = "SELECT Users.UserName, Orders.Amount FROM Users JOIN Orders ON Users.UserID = Orders.UserID ORDER BY Orders.Amount DESC"
-        results = self.query_manager.execute_query(query)
+        results, _ = self.query_manager.execute_query(query)
 
         expected = [
             {"Users.UserName": "Bob", "Orders.Amount": 199.99},
@@ -477,7 +477,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(4, "2023-10-02", 50.0, 1)
 
         query = "SELECT UserID, OrderDate FROM Orders GROUP BY UserID, OrderDate"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         expected = [
             {"UserID": 1, "OrderDate": "2023-10-01"},
@@ -497,7 +497,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(3, "2023-10-03", 50.0, 2)
 
         query = "SELECT Users.UserName, Orders.Amount FROM Users JOIN Orders ON Users.UserID = Orders.UserID GROUP BY Users.UserName"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         expected = [
             {"Users.UserName": "Alice", "Orders.Amount": 100.0},
@@ -518,7 +518,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(3, "2023-10-03", 50.0, 2)
 
         query = "SELECT UserID, MAX(Amount) FROM Orders"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         self.assertEqual(len(result), 1)
         self.assertIn({"UserID": 1, "Amount": 200.0}, result)
@@ -533,7 +533,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(3, "2023-10-03", 50.0, 2)
 
         query = "SELECT UserID, MAX(Amount) FROM Orders GROUP BY UserID"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         self.assertEqual(len(result), 2)
         self.assertIn({"UserID": 1, "Amount": 200.0}, result)
@@ -549,7 +549,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(3, "2023-10-03", 50.0, 2)
 
         query = "SELECT Users.UserName, SUM(Orders.Amount) FROM Users JOIN Orders ON Users.UserID = Orders.UserID GROUP BY Users.UserName"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
         expected = [
             {"Users.UserName": "Alice", "Orders.Amount": 300.0},
@@ -571,7 +571,7 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(4, "2023-10-04", 300.0, 2)
 
         query = "SELECT UserID, SUM(Amount) FROM Orders GROUP BY UserID HAVING SUM(Amount) > 200 AND UserID < 3"
-        result = self.query_manager.execute_query(query)
+        result, _ = self.query_manager.execute_query(query)
 
     ############################### UPDATE ##########################
     def test_execute_update_query(self):
