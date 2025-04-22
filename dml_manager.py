@@ -189,8 +189,6 @@ class DMLManager:
         else:
             where_fn = _make_where_fn(where, col_names)
 
-        results = []
-
         filtered_rows = []
         for row_list in table_data:
             row_dict = {}
@@ -212,19 +210,36 @@ class DMLManager:
                 for row in filtered_rows
             ]
 
-        if group_by is None and aggregates is None:
-            results = filtered_rows
+        group_by_res = []
+        if group_by is not None:
+            group_by_res = utils.group_by(filtered_rows, group_by)
         else:
-            results = utils.aggregation(filtered_rows, group_by, aggregates)
+            group_by_res = filtered_rows
+
+        aggregates_res = []
+        if aggregates is not None:
+            aggregates_res = utils.aggregation(group_by_res, aggregates, group_by)
             if having:
                 if callable(having):
                     having_fn = having
                 else:
                     having_fn = _make_where_fn(having, col_names)
-                results = [row for row in results if having_fn(row)]
+                aggregates_res = [row for row in aggregates_res if having_fn(row)]
+        else:
+            if isinstance(group_by_res, defaultdict):
+                group_by_res = [
+                    {
+                        **{group_by[i]: group_key[i] for i in range(len(group_key))},
+                        **group_rows[0],
+                    }
+                    for group_key, group_rows in group_by_res.items()
+                ]
+            aggregates_res = group_by_res
 
         if order_by:
-            results = utils.order_by(filtered_rows, order_by)
+            results = utils.order_by(aggregates_res, order_by)
+        else:
+            results = aggregates_res
 
         return results
 
@@ -486,16 +501,37 @@ class DMLManager:
                 {col: row[col] for col in columns if col in row} for row in results
             ]
 
-        if group_by is not None and aggregates is not None:
-            results = utils.aggregation(results, group_by, aggregates)
+        group_by_res = []
+        if group_by is not None:
+            group_by_res = utils.group_by(results, group_by)
+        else:
+            group_by_res = results
+
+        aggregates_res = []
+        if (
+            group_by is not None and aggregates is not None
+        ):  # needs group by to eliminate ambiguity
+            aggregates_res = utils.aggregation(group_by_res, aggregates, group_by)
             if having:
                 if callable(having):
                     having_fn = having
                 else:
                     having_fn = _make_where_fn(having, outer_cols + inner_cols)
-                results = [row for row in results if having_fn(row)]
+                aggregates_res = [row for row in aggregates_res if having_fn(row)]
+        else:
+            if isinstance(group_by_res, defaultdict):
+                group_by_res = [
+                    {
+                        **{group_by[i]: group_key[i] for i in range(len(group_key))},
+                        **group_rows[0],
+                    }
+                    for group_key, group_rows in group_by_res.items()
+                ]
+            aggregates_res = group_by_res
 
         if order_by:
-            results = utils.order_by(results, order_by)
+            results = utils.order_by(aggregates_res, order_by)
+        else:
+            results = aggregates_res
 
         return results

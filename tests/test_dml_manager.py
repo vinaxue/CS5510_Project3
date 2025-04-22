@@ -174,7 +174,7 @@ class TestDMLManager(unittest.TestCase):
         self.assertIn("Alice", names)
         self.assertIn("Bob", names)
 
-    def test_select_with_group_by_min(self):
+    def test_select_with_group_by(self):
         """Test selecting with group by"""
         self.dml_manager.insert("orders", [101, 1, 99.99])
         self.dml_manager.insert("orders", [102, 1, 49.99])
@@ -184,17 +184,20 @@ class TestDMLManager(unittest.TestCase):
             "orders",
             columns=["user_id", "amount"],
             group_by=["user_id"],
-            aggregates={MIN: "amount"},
         )
+
+        # print(results)
 
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["user_id"], 1)
-        self.assertEqual(results[0]["amount"], 49.99)
+        self.assertEqual(
+            results[0]["amount"], 99.99
+        )  # First order amount with user_id 1
         self.assertEqual(results[1]["user_id"], 2)
         self.assertEqual(results[1]["amount"], 29.99)
 
-    def test_select_with_group_by_max(self):
-        """Test selecting with group by"""
+    def test_select_with_aggregation(self):
+        """Test selecting with aggregation"""
         self.dml_manager.insert("orders", [101, 1, 99.99])
         self.dml_manager.insert("orders", [102, 1, 49.99])
         self.dml_manager.insert("orders", [103, 2, 29.99])
@@ -202,18 +205,15 @@ class TestDMLManager(unittest.TestCase):
         results = self.dml_manager.select(
             "orders",
             columns=["user_id", "amount"],
-            group_by=["user_id"],
             aggregates={MAX: "amount"},
         )
 
-        self.assertEqual(len(results), 2)
+        self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["user_id"], 1)
         self.assertEqual(results[0]["amount"], 99.99)
-        self.assertEqual(results[1]["user_id"], 2)
-        self.assertEqual(results[1]["amount"], 29.99)
 
-    def test_select_with_group_by_sum(self):
-        """Test selecting with group by"""
+    def test_select_with_group_by_and_aggregation(self):
+        """Test selecting with group by and aggregation"""
         self.dml_manager.insert("orders", [101, 1, 99.99])
         self.dml_manager.insert("orders", [102, 1, 49.99])
         self.dml_manager.insert("orders", [103, 2, 29.99])
@@ -224,6 +224,8 @@ class TestDMLManager(unittest.TestCase):
             group_by=["user_id"],
             aggregates={SUM: "amount"},
         )
+
+        # print(results)
 
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["user_id"], 1)
@@ -560,6 +562,33 @@ class TestDMLManager(unittest.TestCase):
             {"employees_L.name": "Bob", "employees_R.name": "Charlie"}, results
         )
         self.assertIn({"employees_L.name": "Bob", "employees_R.name": "David"}, results)
+
+    def test_select_join_with_group_by(self):
+        """Test join with group by"""
+        self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
+        self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
+        self.dml_manager.insert("orders", [101, 1, 99.99])
+        self.dml_manager.insert("orders", [102, 1, 49.99])
+        self.dml_manager.insert("orders", [103, 2, 29.99])
+        self.dml_manager.insert("orders", [104, 2, 199.99])
+
+        results = self.dml_manager.select_join_with_index(
+            left_table="users",
+            right_table="orders",
+            left_join_col="id",
+            right_join_col="user_id",
+            columns=["users.name", "orders.amount"],
+            group_by=["users.name"],
+        )
+
+        expected = [
+            {"users.name": "Alice", "orders.amount": 99.99},
+            {"users.name": "Bob", "orders.amount": 29.99},
+        ]
+
+        self.assertEqual(len(results), 2)
+        self.assertIn(expected[0], results)
+        self.assertIn(expected[1], results)
 
     def test_select_join_with_group_by_and_aggregation(self):
         """Test join with group by and aggregation"""

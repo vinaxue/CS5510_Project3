@@ -118,6 +118,52 @@ class TestQueryManager(unittest.TestCase):
             {"UserID": {"referenced_table": "Users", "referenced_column": "UserID"}},
         )
 
+    def test_execute_create_table_with_multiple_foreign_keys(self):
+        self.setup_table_users()
+
+        db = self.storage.load_db()
+
+        query = """CREATE TABLE Products (
+            ProductID INT PRIMARY KEY,
+            ProductName STRING,
+            Price DOUBLE
+        )"""
+        self.query_manager.execute_query(query)
+
+        query = """CREATE TABLE Orders_2 (
+            OrderID INT PRIMARY KEY,
+            OrderDate STRING,
+            Amount DOUBLE,
+            UserID INT FOREIGN KEY REFERENCES Users(UserID),
+            ProductID INT FOREIGN KEY REFERENCES Products(ProductID)
+        )"""
+        self.query_manager.execute_query(query)
+
+        db = self.storage.load_db()
+        self.assertIn("Orders_2", db["TABLES"])
+        self.assertEqual(db["TABLES"]["Orders_2"]["primary_key"], "OrderID")
+        self.assertEqual(
+            db["COLUMNS"]["Orders_2"],
+            {
+                "OrderID": INT,
+                "OrderDate": STRING,
+                "Amount": DOUBLE,
+                "UserID": INT,
+                "ProductID": INT,
+            },
+        )
+        self.assertIn("Orders_2", db["FOREIGN_KEYS"])
+        self.assertEqual(
+            db["FOREIGN_KEYS"]["Orders_2"],
+            {
+                "UserID": {"referenced_table": "Users", "referenced_column": "UserID"},
+                "ProductID": {
+                    "referenced_table": "Products",
+                    "referenced_column": "ProductID",
+                },
+            },
+        )
+
     ############################ INSERT ##########################
     def test_execute_insert_query(self):
         self.setup_table_users()
@@ -230,7 +276,7 @@ class TestQueryManager(unittest.TestCase):
 
         query = "SELECT UserName FROM Users WHERE UserID > 1"
         result = self.query_manager.execute_query(query)
-        print(result)
+        # print(result)
         self.assertEqual(result, [{"UserName": "Bob"}])
 
     def test_execute_select_query_with_two_conditions(self):
@@ -303,7 +349,7 @@ class TestQueryManager(unittest.TestCase):
 
         query = "SELECT Users.UserName, Orders.OrderID FROM Users JOIN Orders ON Users.UserID = Orders.UserID WHERE Users.UserID < 2 OR Orders.Amount > 50.0"
         result = self.query_manager.execute_query(query)
-        print(result)
+        # print(result)
         self.assertEqual(
             result,
             [
@@ -420,6 +466,48 @@ class TestQueryManager(unittest.TestCase):
 
         self.assertEqual(results, expected)
 
+    def test_execute_select_with_group_by(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.setup_table_orders()
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 1)
+        self.insert_order(3, "2023-10-03", 50.0, 2)
+        self.insert_order(4, "2023-10-02", 50.0, 1)
+
+        query = "SELECT UserID, OrderDate FROM Orders GROUP BY UserID, OrderDate"
+        result = self.query_manager.execute_query(query)
+
+        expected = [
+            {"UserID": 1, "OrderDate": "2023-10-01"},
+            {"UserID": 1, "OrderDate": "2023-10-02"},
+            {"UserID": 2, "OrderDate": "2023-10-03"},
+        ]
+
+        self.assertEqual(result, expected)
+
+    def test_execute_select_with_join_with_group_by(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.setup_table_orders()
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 1)
+        self.insert_order(3, "2023-10-03", 50.0, 2)
+
+        query = "SELECT Users.UserName, Orders.Amount FROM Users JOIN Orders ON Users.UserID = Orders.UserID GROUP BY Users.UserName"
+        result = self.query_manager.execute_query(query)
+
+        expected = [
+            {"Users.UserName": "Alice", "Orders.Amount": 100.0},
+            {"Users.UserName": "Bob", "Orders.Amount": 50.0},
+        ]
+
+        self.assertEqual(len(result), 2)
+        self.assertIn(expected[0], result)
+        self.assertIn(expected[1], result)
+
     def test_execute_select_with_aggregation(self):
         self.setup_table_users()
         self.insert_user(1, "Alice", "alice@example.com")
@@ -429,10 +517,61 @@ class TestQueryManager(unittest.TestCase):
         self.insert_order(2, "2023-10-02", 200.0, 1)
         self.insert_order(3, "2023-10-03", 50.0, 2)
 
-        query = "SELECT UserID, SUM(Amount) AS TotalAmount FROM Orders GROUP BY UserID"
+        query = "SELECT UserID, MAX(Amount) FROM Orders"
+        result = self.query_manager.execute_query(query)
+
+        self.assertEqual(len(result), 1)
+        self.assertIn({"UserID": 1, "Amount": 200.0}, result)
+
+    def test_execute_select_with_aggregation_and_group_by(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.setup_table_orders()
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 1)
+        self.insert_order(3, "2023-10-03", 50.0, 2)
+
+        query = "SELECT UserID, MAX(Amount) FROM Orders GROUP BY UserID"
         result = self.query_manager.execute_query(query)
 
         self.assertEqual(len(result), 2)
+        self.assertIn({"UserID": 1, "Amount": 200.0}, result)
+        self.assertIn({"UserID": 2, "Amount": 50.0}, result)
+
+    def test_execute_select_with_join_with_aggregation_and_group_by(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.setup_table_orders()
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 1)
+        self.insert_order(3, "2023-10-03", 50.0, 2)
+
+        query = "SELECT Users.UserName, SUM(Orders.Amount) FROM Users JOIN Orders ON Users.UserID = Orders.UserID GROUP BY Users.UserName"
+        result = self.query_manager.execute_query(query)
+
+        expected = [
+            {"Users.UserName": "Alice", "Orders.Amount": 300.0},
+            {"Users.UserName": "Bob", "Orders.Amount": 50.0},
+        ]
+
+        self.assertEqual(len(result), 2)
+        self.assertIn(expected[0], result)
+        self.assertIn(expected[1], result)
+
+    def test_execute_select_with_aggregation_and_group_by_with_having(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.setup_table_orders()
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 1)
+        self.insert_order(3, "2023-10-03", 50.0, 2)
+        self.insert_order(4, "2023-10-04", 300.0, 2)
+
+        query = "SELECT UserID, SUM(Amount) FROM Orders GROUP BY UserID HAVING SUM(Amount) > 200 AND UserID < 3"
+        result = self.query_manager.execute_query(query)
 
     ############################### UPDATE ##########################
     def test_execute_update_query(self):

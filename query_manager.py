@@ -15,13 +15,13 @@ from pyparsing import (
     Combine,
     OneOrMore,
     ZeroOrMore,
-    Literal,   
+    Literal,
 )
 
 from ddl_manager import DDLManager
 from dml_manager import DMLManager
 from storage_manager import StorageManager
-from utils import ASC, DESC, track_time
+from utils import ASC, DESC, MAX, MIN, SUM, track_time
 import time
 from functools import wraps
 
@@ -69,11 +69,13 @@ class QueryManager:
 
         star = Literal("*").setName("star")
         agg_func = Group(
-            (CaselessKeyword("MIN") 
-            | CaselessKeyword("MAX")
-            | CaselessKeyword("SUM") 
-            | CaselessKeyword("AVG")
-            | CaselessKeyword("COUNT"))("func")
+            (
+                CaselessKeyword("MIN")
+                | CaselessKeyword("MAX")
+                | CaselessKeyword("SUM")
+                | CaselessKeyword("AVG")
+                | CaselessKeyword("COUNT")
+            )("func")
             + Suppress("(")
             + (self.qualified_identifier | star)("col")
             + Suppress(")")
@@ -136,12 +138,12 @@ class QueryManager:
 
         # Define a single simple condition: qualified_identifier operator (constant | qualified_identifier)
         identifier_or_agg = agg_func | self.qualified_identifier
-        value_expr       = self.constant | identifier_or_agg
+        value_expr = self.constant | identifier_or_agg
 
         self.simple_condition = Group(
             identifier_or_agg("left")
-        + oneOf("= > < >= <=")("operator")
-        + value_expr("right")
+            + oneOf("= > < >= <=")("operator")
+            + value_expr("right")
         )
         # Allow chaining of simple_condition via AND/OR recursively
         self.condition <<= self.simple_condition + ZeroOrMore(
@@ -152,9 +154,9 @@ class QueryManager:
         self.where_condition = Group(self.WHERE + self.condition)("where")
         # --- Multi-condition WHERE support ends ---
         self.group_by_clause = Group(self.GROUP + self.BY + self.column_list)
-        self.having_clause = Group(
-            self.HAVING + self.condition
-        ).setResultsName("having")
+        self.having_clause = Group(self.HAVING + self.condition).setResultsName(
+            "having"
+        )
         self.order_by_clause = Group(
             self.ORDER + self.BY + delimitedList(order_spec)("order_specs")
         )
@@ -301,7 +303,6 @@ class QueryManager:
         return results
 
     def _build_condition_fn(self, tokens):
-        # print(tokens)
         """
         Recursively build a filter function f(row_dict)->bool from tokens,
         where tokens is either:
@@ -369,6 +370,7 @@ class QueryManager:
         return where_fn
 
     def _build_where_fn(self, where_parse):
+        print(where_parse)
         cond_tokens = where_parse[1:]
         return self._build_condition_fn(cond_tokens)
 
@@ -454,8 +456,8 @@ class QueryManager:
 
             # ----- SELECT -----
             if cmd == "SELECT":
+                print(parsed)
                 sel = parsed[1]
-                cols = None if sel == "*" else list(sel)
                 from_clause = parsed[3]
                 left_tbl = from_clause[0]
                 # Build where function if present
@@ -481,6 +483,7 @@ class QueryManager:
 
                 # Get group by
                 group_tok = None
+                group_by_col = []
                 for tok in parsed:
                     if (
                         len(tok) >= 2
@@ -490,7 +493,57 @@ class QueryManager:
                         group_tok = tok
                         break
                 if group_tok:
-                    ...
+                    for cols in group_tok[2]:
+                        group_by_col.append(cols)
+
+                # Get cols and aggregation
+                cols = None if sel == "*" else []
+                agg_func = []
+
+                aggregation_function_map = {
+                    "max": MAX,
+                    "min": MIN,
+                    "sum": SUM,
+                }
+
+                # Look for aggregation functions in the list of selected columns
+                if cols is not None:
+                    for tok in sel:
+                        if isinstance(tok, str):
+                            cols.append(tok)
+                        elif tok[0].lower() in aggregation_function_map:
+                            agg_func.append(
+                                {aggregation_function_map[tok[0].lower()]: tok[1]}
+                            )
+                            cols.append(tok[1])
+
+                # Get having if aggregation
+                # if len(agg_func) > 0:
+                #     having_tok = parsed.get("having")
+                #     if having_tok:
+                #         for condition in having_tok[1]:
+                #             agg_col = condition[0][1]
+                #             for agg in agg_func:
+                #                 if (
+                #                     agg_col in agg.values()
+                #                 ):  # The column is part of an aggregation function
+                #                     # Remove the aggregation function (e.g., 'SUM') and change to WHERE
+                #                     condition[0] = (
+                #                         agg_col  # Now the condition only has the column (e.g., 'Amount')
+                #                     )
+
+                #                     # Convert HAVING to WHERE by changing the keyword
+                #                     parsed["having"] = ["WHERE"] + condition[
+                #                         1:
+                #                     ]  # Convert 'HAVING' to 'WHERE' with the condition
+                #                     print(
+                #                         f"Processed WHERE condition: {parsed['having']}"
+                #                     )
+                #                     break
+                #     else:
+                #         having_fn = None
+
+                # print(having_fn)
 
                 # Check for JOIN
                 if len(from_clause) > 1:
@@ -507,6 +560,8 @@ class QueryManager:
                         columns=cols,
                         where=where_fn,
                         order_by=order_tuples,
+                        group_by=group_by_col if group_tok else None,
+                        aggregates=agg_func if len(agg_func) > 0 else None,
                     )
                 else:
                     result = self.dml_manager.select(
@@ -514,6 +569,8 @@ class QueryManager:
                         columns=cols,
                         where=where_fn,
                         order_by=order_tuples,
+                        group_by=group_by_col if group_tok else None,
+                        aggregates=agg_func if len(agg_func) > 0 else None,
                     )
                 return result
 
@@ -525,7 +582,7 @@ class QueryManager:
                     self._build_where_fn(where_parse) if where_parse else None
                 )
                 deleted_count = self.dml_manager.delete(tbl, base_where_fn)
-                print(f"Deleted {deleted_count} rows from {tbl}.")
+                # print(f"Deleted {deleted_count} rows from {tbl}.")
                 return deleted_count
 
             # ----- UPDATE -----
@@ -544,7 +601,7 @@ class QueryManager:
                 where_tok = parsed.get("where")
                 where_fn = self._build_where_fn(where_tok) if where_tok else None
                 count = self.dml_manager.update(tbl, updates, where_fn)
-                print(f"Updated {count} rows in {tbl}.")
+                # print(f"Updated {count} rows in {tbl}.")
                 return
 
             # Unsupported command

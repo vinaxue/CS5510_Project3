@@ -1,0 +1,16 @@
+CREATE TABLE table_name (col_1 INT PRIMARY KEY, col_2 STRING, col_3 DOUBLE, col_4 INT FOREIGN KEY REFERENCES ref_table(ref_col)); 
+CREATE INDEX index_name ON table_name(col_name); 
+DROP TABLE table_name;
+DROP INDEX index_name ON table_name;
+
+INSERT INTO table_name (col_1, col_2) VALUES (val_1, val_2); 
+SELECT * FROM table_name; -> selects all cols 
+SELECT col_1, col_2 FROM table_name; 
+SELECT table_1.col_1, table_2.col_2, SUM(table_1.col_3) FROM table_1 JOIN table_2 ON table_1.col_1 = table_2.col_2 
+    WHERE table_1.col_1 = 1 AND table_1.col_1 > 4 
+    GROUP BY table_1.col_3 (?)
+    HAVING SUM(table_1.col_3) < 5 (?)
+    ORDER BY table_1.col_1 DESC, table_2.col_3 ASC; 
+
+DELETE FROM table_name WHERE ...; 
+UPDATE table_name SET col_name = new_val WHERE ...; 

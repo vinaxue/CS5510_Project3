@@ -74,31 +74,64 @@ def _make_where_fn(where, col_names):
         raise ValueError(f"Unsupported where type: {where!r}")
 
 
-def aggregation(results, group_by, aggregates):
-    """Performs aggregation on the results based on group_by and aggregates."""
+def group_by(results, group_by):
+    if not all(col in results[0] for col in group_by):
+        raise ValueError(
+            "One or more columns in 'group_by' are not selected in the query"
+        )
+
     groups = defaultdict(list)
     for row in results:
         key = tuple(row[col] for col in group_by)
         groups[key].append(row)
+    return groups
 
+
+def aggregation_fn(agg_func, values):
+    if not values:
+        agg_val = None
+    elif agg_func == MAX:
+        agg_val = round(max(values), 2)
+    elif agg_func == MIN:
+        agg_val = round(min(values), 2)
+    elif agg_func == SUM:
+        agg_val = round(sum(values), 2)
+    else:
+        raise ValueError(f"Unsupported aggregate: {agg_func}")
+
+    return agg_val
+
+
+def aggregation(rows, aggregates, group_by=None):
     aggregated_results = []
 
-    for group_key, group_rows in groups.items():
-        result_row = {col: group_key[i] for i, col in enumerate(group_by)}
+    if isinstance(rows, defaultdict):
+        for group_key, row in rows.items():
+            result_row = {}
 
-        for agg_func, col in aggregates.items():
-            values = [r[col] for r in group_rows if r[col] is not None]
+            for i, group_val in enumerate(group_key):
+                result_row[group_by[i]] = group_val
 
-            if not values:
-                result_row[col] = None
-            elif agg_func == MAX:
-                result_row[col] = round(max(values), 2)
-            elif agg_func == MIN:
-                result_row[col] = round(min(values), 2)
-            elif agg_func == SUM:
-                result_row[col] = round(sum(values), 2)
-            else:
-                raise ValueError(f"Unsupported aggregate: {agg_func}")
+            for agg_dict in reversed(aggregates):
+                for agg_func, col in agg_dict.items():
+                    values = [r[col] for r in row if r[col] is not None]
+                    agg_val = aggregation_fn(agg_func, values)
+                    result_row[f"{col}"] = agg_val
+
+            aggregated_results.append(result_row)
+
+    elif isinstance(rows, list):
+        result_row = {}
+
+        for key in rows[0]:
+            if all(key != agg_dict[col] for agg_dict in aggregates for col in agg_dict):
+                result_row[key] = rows[0][key]
+
+        for agg_dict in reversed(aggregates):
+            for agg_func, col in agg_dict.items():
+                values = [r[col] for r in rows if r[col] is not None]
+                agg_val = aggregation_fn(agg_func, values)
+                result_row[f"{col}"] = agg_val
 
         aggregated_results.append(result_row)
 
