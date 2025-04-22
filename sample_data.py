@@ -1,5 +1,6 @@
 from ddl_manager import DDLManager
 from dml_manager import DMLManager
+from query_manager import QueryManager
 from storage_manager import StorageManager
 from utils import INT, track_time
 
@@ -60,7 +61,7 @@ def load_data(name, data):
 rel_i_i_1000 = []
 for i in range(1000):
     rel_i_i_1000.append([i, i])
-load_data("rel_i_i_1000", rel_i_i_1000)
+# load_data("rel_i_i_1000", rel_i_i_1000)
 
 
 rel_i_1_1000 = []
@@ -104,3 +105,17 @@ for i in range(100000):
 #         {"op": "OR", "left": ["value", "=", 835], "right": ["id", "=", 3004]},
 #     ),
 # )
+
+query = "SELECT * FROM rel_i_i_100000 JOIN rel_i_1_1000 ON rel_i_i_100000.id = rel_i_1_1000.id;"
+query_manager = QueryManager(storage_manager, ddl_manager, dml_manager)
+
+res, runtime = query_manager.execute_query(query)
+print(len(res))
+
+res = dml_manager.select_join_with_index(
+    left_table="rel_i_i_100000",
+    right_table="rel_i_1_1000",
+    left_join_col="id",
+    right_join_col="id",
+)
+print(len(res))

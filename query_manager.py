@@ -22,20 +22,6 @@ from ddl_manager import DDLManager
 from dml_manager import DMLManager
 from storage_manager import StorageManager
 from utils import ASC, DESC, MAX, MIN, SUM, track_time
-import time
-from functools import wraps
-
-
-def track_time(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        result = func(*args, **kwargs)
-        elapsed = (time.time() - start) * 1000
-        print(f"{func.__name__} executed in {elapsed:.2f} ms")
-        return result
-
-    return wrapper
 
 
 class QueryManager:
@@ -424,7 +410,7 @@ class QueryManager:
                 continue
 
             # ----- DROP -----
-            if cmd == "DROP":
+            elif cmd == "DROP":
                 # DROP TABLE
                 if parsed[1].upper() == "TABLE":
                     tbl = parsed[2]
@@ -436,26 +422,17 @@ class QueryManager:
                 continue
 
             # ----- INSERT -----
-            if cmd == "INSERT":
+            elif cmd == "INSERT":
                 tbl = parsed[2]
                 raw_vals = parsed.get("values") or []
                 vals = []
                 for v in raw_vals:
                     vals.append(v)
-                # # Convert to int/float if possible
-                # vals = []
-                # for v in raw_vals:
-                #     if isinstance(v, str) and v.isdigit():
-                #         vals.append(int(v))
-                #     elif isinstance(v, str) and v.replace(".", "", 1).isdigit():
-                #         vals.append(float(v))
-                #     else:
-                #         vals.append(v)
                 self.dml_manager.insert(tbl, vals)
                 continue
 
             # ----- SELECT -----
-            if cmd == "SELECT":
+            elif cmd == "SELECT":
                 print(parsed)
                 sel = parsed[1]
                 from_clause = parsed[3]
@@ -575,7 +552,7 @@ class QueryManager:
                 return result
 
             # ----- DELETE -----
-            if cmd == "DELETE":
+            elif cmd == "DELETE":
                 tbl = parsed["table"]
                 where_parse = parsed.get("where")
                 base_where_fn = (
@@ -586,7 +563,7 @@ class QueryManager:
                 return deleted_count
 
             # ----- UPDATE -----
-            if cmd == "UPDATE":
+            elif cmd == "UPDATE":
                 tbl = parsed.get("table")
                 # Parse SET clauses
                 updates = {}
@@ -602,10 +579,11 @@ class QueryManager:
                 where_fn = self._build_where_fn(where_tok) if where_tok else None
                 count = self.dml_manager.update(tbl, updates, where_fn)
                 # print(f"Updated {count} rows in {tbl}.")
-                return
+                return count
 
             # Unsupported command
-            raise Exception(f"Unsupported SQL command: {cmd}")
+            else:
+                raise Exception(f"Unsupported SQL command: {cmd}")
 
 
 # -*- coding: utf-8 -*-
