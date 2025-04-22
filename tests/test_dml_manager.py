@@ -205,7 +205,7 @@ class TestDMLManager(unittest.TestCase):
         results = self.dml_manager.select(
             "orders",
             columns=["user_id", "amount"],
-            aggregates={MAX: "amount"},
+            aggregates=[{MAX: "amount"}],
         )
 
         self.assertEqual(len(results), 1)
@@ -222,7 +222,7 @@ class TestDMLManager(unittest.TestCase):
             "orders",
             columns=["user_id", "amount"],
             group_by=["user_id"],
-            aggregates={SUM: "amount"},
+            aggregates=[{SUM: "amount"}],
         )
 
         # print(results)
@@ -283,7 +283,7 @@ class TestDMLManager(unittest.TestCase):
             "orders",
             columns=["user_id", "amount"],
             group_by=["user_id"],
-            aggregates={SUM: "amount"},
+            aggregates=[{SUM: "amount"}],
             having=lambda row: row["amount"] > 50,
         )
 
@@ -606,7 +606,7 @@ class TestDMLManager(unittest.TestCase):
             right_join_col="user_id",
             columns=["users.name", "orders.amount"],
             group_by=["users.name"],
-            aggregates={SUM: "orders.amount"},
+            aggregates=[{SUM: "orders.amount"}],
         )
 
         expected = [
@@ -661,7 +661,7 @@ class TestDMLManager(unittest.TestCase):
             right_join_col="user_id",
             columns=["users.name", "orders.amount"],
             group_by=["users.name"],
-            aggregates={SUM: "orders.amount"},
+            aggregates=[{SUM: "orders.amount"}],
             having=lambda row: row["orders.amount"] > 150,
         )
 
