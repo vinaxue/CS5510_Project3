@@ -494,6 +494,9 @@ class QueryManager:
                             )
                             cols.append(tok[1])
 
+                having_tok = parsed.get("having")                                  
+                having_fn = self._build_where_fn(having_tok) if having_tok else None 
+
                 # Get having if aggregation
                 # if len(agg_func) > 0:
                 #     having_tok = parsed.get("having")
@@ -548,6 +551,7 @@ class QueryManager:
                         order_by=order_tuples,
                         group_by=group_by_col if group_tok else None,
                         aggregates=agg_func if len(agg_func) > 0 else None,
+                        having=having_fn,
                     )
                 return result
 
