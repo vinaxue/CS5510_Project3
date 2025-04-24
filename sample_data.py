@@ -61,7 +61,7 @@ def load_data(name, data):
 rel_i_i_1000 = []
 for i in range(1000):
     rel_i_i_1000.append([i, i])
-# load_data("rel_i_i_1000", rel_i_i_1000)
+load_data("rel_i_i_1000", rel_i_i_1000)
 
 
 rel_i_1_1000 = []
@@ -73,7 +73,7 @@ for i in range(1000):
 rel_i_i_100000 = []
 for i in range(100000):
     rel_i_i_100000.append([i, i])
-# load_data("rel_i_i_100000", rel_i_i_100000)
+load_data("rel_i_i_100000", rel_i_i_100000)
 
 rel_i_1_100000 = []
 for i in range(100000):
@@ -111,7 +111,8 @@ query_manager = QueryManager(storage_manager, ddl_manager, dml_manager)
 
 res, runtime = query_manager.execute_query(query)
 print(len(res))
-
+ddl_manager.create_index("rel_i_i_100000", "id")
+print()
 res = dml_manager.select_join_with_index(
     left_table="rel_i_i_100000",
     right_table="rel_i_1_1000",
