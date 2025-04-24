@@ -4,6 +4,7 @@ import unittest
 from storage_manager import (
     StorageManager,
 )
+from BTrees.OOBTree import OOBTree
 
 
 class TestStorageManager(unittest.TestCase):
@@ -41,11 +42,30 @@ class TestStorageManager(unittest.TestCase):
 
     def test_save_and_load_index(self):
         """Test saving and loading the index"""
-        self.storage.index["test_index"] = "some_value"
+        expected = {
+            "id": {
+                "tree": OOBTree(),
+                "name": "test_table_id_idx",
+            },
+            "name": {
+                "tree": OOBTree(),
+                "name": "test_table_name_idx",
+            },
+        }
+        self.storage.index["test_table"] = expected
         self.storage.save_index()
         self.storage.index = {}  # Clear in-memory index
         self.storage.index = self.storage.load_index()
-        self.assertEqual(self.storage.index["test_index"], "some_value")
+        self.assertIn("id", self.storage.index["test_table"])
+        self.assertIn("name", self.storage.index["test_table"])
+        self.assertEqual(
+            self.storage.index["test_table"]["id"]["name"], "test_table_id_idx"
+        )
+        self.assertEqual(
+            self.storage.index["test_table"]["name"]["name"], "test_table_name_idx"
+        )
+        self.assertIsInstance(self.storage.index["test_table"]["id"]["tree"], OOBTree)
+        self.assertIsInstance(self.storage.index["test_table"]["name"]["tree"], OOBTree)
 
 
 if __name__ == "__main__":
