@@ -356,7 +356,7 @@ class QueryManager:
         return where_fn
 
     def _build_where_fn(self, where_parse):
-        print(where_parse)
+        # print(where_parse)
         cond_tokens = where_parse[1:]
         return self._build_condition_fn(cond_tokens)
 
@@ -494,36 +494,8 @@ class QueryManager:
                             )
                             cols.append(tok[1])
 
-                having_tok = parsed.get("having")                                  
-                having_fn = self._build_where_fn(having_tok) if having_tok else None 
-
-                # Get having if aggregation
-                # if len(agg_func) > 0:
-                #     having_tok = parsed.get("having")
-                #     if having_tok:
-                #         for condition in having_tok[1]:
-                #             agg_col = condition[0][1]
-                #             for agg in agg_func:
-                #                 if (
-                #                     agg_col in agg.values()
-                #                 ):  # The column is part of an aggregation function
-                #                     # Remove the aggregation function (e.g., 'SUM') and change to WHERE
-                #                     condition[0] = (
-                #                         agg_col  # Now the condition only has the column (e.g., 'Amount')
-                #                     )
-
-                #                     # Convert HAVING to WHERE by changing the keyword
-                #                     parsed["having"] = ["WHERE"] + condition[
-                #                         1:
-                #                     ]  # Convert 'HAVING' to 'WHERE' with the condition
-                #                     print(
-                #                         f"Processed WHERE condition: {parsed['having']}"
-                #                     )
-                #                     break
-                #     else:
-                #         having_fn = None
-
-                # print(having_fn)
+                having_tok = parsed.get("having")
+                having_fn = self._build_where_fn(having_tok) if having_tok else None
 
                 # Check for JOIN
                 if len(from_clause) > 1:

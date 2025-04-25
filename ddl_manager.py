@@ -21,7 +21,6 @@ class DDLManager:
 
         self.reload()
 
-
         if table_name not in self.db["TABLES"]:
             raise ValueError(f"Table '{table_name}' does not exist")
         if column_name not in self.db["COLUMNS"][table_name]:
@@ -32,30 +31,37 @@ class DDLManager:
         if table_name not in self.index:
             self.index[table_name] = {}
 
- 
         if column_name in self.index[table_name]:
-
             old = self.index[table_name][column_name]
             self.index[table_name][column_name] = {
                 "tree": OOBTree(),
-                "name": old.get("name", index_name or f"{table_name}_{column_name}_idx"),
+                "name": old.get(
+                    "name",
+                    (
+                        index_name
+                        if index_name is not None
+                        else f"{table_name}_{column_name}_idx"
+                    ),
+                ),
             }
         else:
-
             self.index[table_name][column_name] = {
                 "tree": OOBTree(),
-                "name": index_name or f"{table_name}_{column_name}_idx",
+                "name": (
+                    index_name
+                    if index_name is not None
+                    else f"{table_name}_{column_name}_idx"
+                ),
             }
 
         col_names = list(self.db["COLUMNS"][table_name].keys())
-        col_idx   = col_names.index(column_name)
-        tree      = self.index[table_name][column_name]["tree"]
+        col_idx = col_names.index(column_name)
+        tree = self.index[table_name][column_name]["tree"]
 
         for row_id, row in enumerate(self.db["DATA"][table_name]):
             key = row[col_idx]
             tree.setdefault(key, []).append(row_id)
 
-       
         self.storage_manager.save_index()
 
     def drop_index(self, index_name):

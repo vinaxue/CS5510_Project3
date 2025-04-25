@@ -56,9 +56,11 @@ class StorageManager:
             idx.setdefault(table, {})
             for col, rawdict in cols.items():
                 tree = OOBTree()
-                for key, rids in rawdict.items():
+                tree_data = rawdict["tree"]
+                name = rawdict["name"]
+                for key, rids in tree_data.items():
                     tree[key] = rids
-                idx[table][col] = {"tree": tree, "name": f"{table}_{col}_idx"}
+                idx[table][col] = {"tree": tree, "name": name}
         return idx
 
     def save_index(self):
@@ -70,8 +72,11 @@ class StorageManager:
         flat = {}
         for table, cols in self.index.items():
             flat.setdefault(table, {})
-            for col, data in cols.items():
-                flat[table][col] = dict(data["tree"])
+            for col, info in cols.items():
+                flat[table][col] = {
+                    "tree": dict(info["tree"]),
+                    "name": info["name"],
+                }
 
         tmp = self.index_file + ".tmp"
         os.makedirs(os.path.dirname(tmp), exist_ok=True)
