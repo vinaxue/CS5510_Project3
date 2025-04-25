@@ -17,7 +17,7 @@ from pyparsing import (
     ZeroOrMore,
     Literal,
 )
-
+from pyparsing import ParseResults
 from ddl_manager import DDLManager
 from dml_manager import DMLManager
 from storage_manager import StorageManager
@@ -307,6 +307,9 @@ class QueryManager:
 
         # Extract column, operator, raw value
         col, op, raw = simple[0], simple[1], simple[2]
+        if isinstance(col, ParseResults):
+            # func_name, col_name = col[0], col[1]
+            col = col[1]    
         val = raw
         # Convert raw literal to int/float if possible
         # try:
@@ -514,6 +517,7 @@ class QueryManager:
                         order_by=order_tuples,
                         group_by=group_by_col if group_tok else None,
                         aggregates=agg_func if len(agg_func) > 0 else None,
+                        having=having_fn,
                     )
                 else:
                     result = self.dml_manager.select(
