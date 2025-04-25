@@ -573,6 +573,34 @@ class TestQueryManager(unittest.TestCase):
         query = "SELECT UserID, SUM(Amount) FROM Orders GROUP BY UserID HAVING SUM(Amount) > 200 AND UserID < 3"
         result, _ = self.query_manager.execute_query(query)
 
+        expected = [{"UserID": 1, "Amount": 300.0}, {"UserID": 2, "Amount": 350.0}]
+
+        self.assertEqual(len(result), 2)
+        self.assertIn(expected[0], result)
+        self.assertIn(expected[1], result)
+
+    def test_execute_select_with_join_with_aggregation_and_group_by_with_having(self):
+        self.setup_table_users()
+        self.insert_user(1, "Alice", "alice@example.com")
+        self.insert_user(2, "Bob", "bob@example.com")
+        self.setup_table_orders()
+        self.insert_order(1, "2023-10-01", 100.0, 1)
+        self.insert_order(2, "2023-10-02", 200.0, 1)
+        self.insert_order(3, "2023-10-03", 50.0, 2)
+        self.insert_order(4, "2023-10-03", 10.0, 2)
+
+        query = "SELECT Users.UserName, MAX(Orders.Amount) FROM Users JOIN Orders ON Users.UserID = Orders.UserID GROUP BY Users.UserName HAVING MAX(Orders.Amount) < 100"
+        result, _ = self.query_manager.execute_query(query)
+
+        print(result)
+
+        expected = [
+            {"Users.UserName": "Bob", "Orders.Amount": 50.0},
+        ]
+
+        self.assertEqual(len(result), 1)
+        self.assertIn(expected[0], result)
+
     ############################### UPDATE ##########################
     def test_execute_update_query(self):
         self.setup_table_users()
