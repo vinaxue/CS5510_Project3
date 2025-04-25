@@ -592,8 +592,6 @@ class TestQueryManager(unittest.TestCase):
         query = "SELECT Users.UserName, MAX(Orders.Amount) FROM Users JOIN Orders ON Users.UserID = Orders.UserID GROUP BY Users.UserName HAVING MAX(Orders.Amount) < 100"
         result, _ = self.query_manager.execute_query(query)
 
-        print(result)
-
         expected = [
             {"Users.UserName": "Bob", "Orders.Amount": 50.0},
         ]

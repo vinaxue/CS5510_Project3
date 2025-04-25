@@ -6,7 +6,7 @@ from utils import INT, track_time
 
 
 storage_manager = StorageManager(
-    db_file="./data/sample_data.pkl", index_file="./data/sample_index.pkl"
+    db_file="./data/sample_data_2.pkl", index_file="./data/sample_index_2.pkl"
 )
 ddl_manager = DDLManager(storage_manager)
 dml_manager = DMLManager(storage_manager)
@@ -50,8 +50,8 @@ def load_data(name, data):
                 tree[value] = []
             tree[value].append(row_id)
 
-        if (i + 1) % 10000 == 0:
-            print((i + 1))
+        # if (i + 1) % 10000 == 0:
+        #     print((i + 1))
 
     # Save once at the end
     storage_manager.save_db()
@@ -59,26 +59,36 @@ def load_data(name, data):
 
 
 rel_i_i_1000 = []
-for i in range(1000):
+for i in range(1, 1001):
     rel_i_i_1000.append([i, i])
 load_data("rel_i_i_1000", rel_i_i_1000)
 
 
 rel_i_1_1000 = []
-for i in range(1000):
+for i in range(1, 1001):
     rel_i_1_1000.append([i, 1])
-# load_data("rel_i_1_1000", rel_i_1_1000)
+load_data("rel_i_1_1000", rel_i_1_1000)
 
 
 rel_i_i_100000 = []
-for i in range(100000):
+for i in range(1, 100001):
     rel_i_i_100000.append([i, i])
 load_data("rel_i_i_100000", rel_i_i_100000)
 
 rel_i_1_100000 = []
-for i in range(100000):
+for i in range(1, 100001):
     rel_i_1_100000.append([i, 1])
-# load_data("rel_i_1_100000", rel_i_1_100000)
+load_data("rel_i_1_100000", rel_i_1_100000)
+
+rel_i_i_1000000 = []
+for i in range(1, 1000001):
+    rel_i_i_100000.append([i, i])
+load_data("rel_i_i_1000000", rel_i_i_1000000)
+
+rel_i_1_1000000 = []
+for i in range(1, 1000001):
+    rel_i_1_100000.append([i, 1])
+load_data("rel_i_1_1000000", rel_i_1_1000000)
 
 
 # db = storage_manager.load_db()
@@ -106,17 +116,17 @@ for i in range(100000):
 #     ),
 # )
 
-query = "SELECT * FROM rel_i_i_100000 JOIN rel_i_1_1000 ON rel_i_i_100000.id = rel_i_1_1000.id;"
-query_manager = QueryManager(storage_manager, ddl_manager, dml_manager)
+# query = "SELECT * FROM rel_i_i_100000 JOIN rel_i_1_1000 ON rel_i_i_100000.id = rel_i_1_1000.id;"
+# query_manager = QueryManager(storage_manager, ddl_manager, dml_manager)
 
-res, runtime = query_manager.execute_query(query)
-print(len(res))
-ddl_manager.create_index("rel_i_i_100000", "id")
-print()
-res = dml_manager.select_join_with_index(
-    left_table="rel_i_i_100000",
-    right_table="rel_i_1_1000",
-    left_join_col="id",
-    right_join_col="id",
-)
-print(len(res))
+# res, runtime = query_manager.execute_query(query)
+# print(len(res))
+# ddl_manager.create_index("rel_i_i_100000", "id")
+# print()
+# res = dml_manager.select_join_with_index(
+#     left_table="rel_i_i_100000",
+#     right_table="rel_i_1_1000",
+#     left_join_col="id",
+#     right_join_col="id",
+# )
+# print(len(res))
