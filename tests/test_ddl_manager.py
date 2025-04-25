@@ -158,11 +158,6 @@ class TestDDLManager(unittest.TestCase):
         self.dml_manager.insert("users", [1, "Alice", "alice@example.com"])
         self.dml_manager.insert("users", [2, "Bob", "bob@example.com"])
 
-        # Manually update the index for primary key
-        self.storage.index["users"]["id"] = OOBTree()
-        self.storage.index["users"]["id"][1] = [0]
-        self.storage.index["users"]["id"][2] = [1]
-
         # Save the changes to the database and index
         self.storage.save_db()
         self.storage.save_index()

@@ -255,7 +255,7 @@ class TestQueryManager(unittest.TestCase):
 
         index = self.storage.load_index()
         self.assertIn("UserName", index["Users"])
-        self.assertIn("idx_UserName", index["Users"]["UserName"]["name"])
+        self.assertEqual("idx_UserName", index["Users"]["UserName"]["name"])
 
     ############################## SELECT ##########################
     def test_execute_select_query(self):

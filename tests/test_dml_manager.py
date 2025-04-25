@@ -661,12 +661,12 @@ class TestDMLManager(unittest.TestCase):
             right_join_col="user_id",
             columns=["users.name", "orders.amount"],
             group_by=["users.name"],
-            aggregates=[{SUM: "orders.amount"}],
+            aggregates=[{MAX: "orders.amount"}],
             having=lambda row: row["orders.amount"] > 150,
         )
 
         expected = [
-            {"users.name": "Bob", "orders.amount": 229.98},
+            {"users.name": "Bob", "orders.amount": 199.99},
         ]
 
         self.assertEqual(len(results), 1)
