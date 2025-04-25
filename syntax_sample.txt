@@ -14,12 +14,3 @@ SELECT table_1.col_1, table_2.col_2, SUM(table_1.col_3) FROM table_1 JOIN table_
 
 DELETE FROM table_name WHERE ...; 
 UPDATE table_name SET col_name = new_val WHERE ...; 
-
-example: 
-SELECT rel_i_i_100000.id, rel_i_i_1000.id, SUM(rel_i_i_100000.value) 
-FROM rel_i_i_100000 
-JOIN rel_i_i_1000 
-ON rel_i_i_100000.id = rel_i_i_1000.id 
-WHERE rel_i_i_1000.id < 300 
-GROUP BY rel_i_i_100000.id, rel_i_i_1000.id 
-HAVING SUM(rel_i_i_100000.value) > 100
