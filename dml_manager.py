@@ -410,23 +410,20 @@ class DMLManager:
         aggregates=None,
     ):
         """
-        Optimized SELECT JOIN: always iterate the smaller table, build index/hash on the larger.
-        Supports where as None, list, dict, or callable(row_dict)->bool.
+        Hash-based SELECT JOIN: always iterate smaller table as outer,
+        build an in-memory hash on the join column of the larger table.
+        完全不使用索引。
         """
         self.reload()
 
+
         if left_table not in self.db["TABLES"] or right_table not in self.db["TABLES"]:
             raise ValueError("One or both tables do not exist.")
-
-        # Validate that the join columns exist in their respective tables
         if left_join_col not in self.db["COLUMNS"][left_table]:
-            raise ValueError(
-                f"Column '{left_join_col}' does not exist in table '{left_table}'."
-            )
+            raise ValueError(f"Column '{left_join_col}' does not exist in '{left_table}'.")
         if right_join_col not in self.db["COLUMNS"][right_table]:
-            raise ValueError(
-                f"Column '{right_join_col}' does not exist in table '{right_table}'."
-            )
+            raise ValueError(f"Column '{right_join_col}' does not exist in '{right_table}'.")
+
 
         if left_alias is None or right_alias is None:
             if left_table == right_table:
@@ -435,78 +432,41 @@ class DMLManager:
             else:
                 left_alias, right_alias = left_table, right_table
 
-        Lcols = list(self.db["COLUMNS"][left_table].keys())
-        Rcols = list(self.db["COLUMNS"][right_table].keys())
-        Ldata = self.db["DATA"][left_table]
-        Rdata = self.db["DATA"][right_table]
-
-        try:
-            Li = Lcols.index(left_join_col)
-            Ri = Rcols.index(right_join_col)
-        except ValueError:
-            raise ValueError(
-                f"Join column {left_join_col} or {right_join_col} not found."
-            )
+        Lcols, Rcols = list(self.db["COLUMNS"][left_table].keys()), list(self.db["COLUMNS"][right_table].keys())
+        Ldata, Rdata = self.db["DATA"][left_table], self.db["DATA"][right_table]
+        Li, Ri = Lcols.index(left_join_col), Rcols.index(right_join_col)
 
         if len(Ldata) <= len(Rdata):
-            outer_data, outer_cols, outer_alias, outer_idx = (
-                Ldata,
-                Lcols,
-                left_alias,
-                Li,
-            )
-            inner_table, inner_data, inner_cols, inner_alias, inner_idx = (
-                right_table,
-                Rdata,
-                Rcols,
-                right_alias,
-                Ri,
-            )
+            outer_data, outer_cols, outer_alias, outer_idx = Ldata, Lcols, left_alias, Li
+            inner_data, inner_cols, inner_alias, inner_idx = Rdata, Rcols, right_alias, Ri
         else:
-            outer_data, outer_cols, outer_alias, outer_idx = (
-                Rdata,
-                Rcols,
-                right_alias,
-                Ri,
-            )
-            inner_table, inner_data, inner_cols, inner_alias, inner_idx = (
-                left_table,
-                Ldata,
-                Lcols,
-                left_alias,
-                Li,
-            )
+            outer_data, outer_cols, outer_alias, outer_idx = Rdata, Rcols, right_alias, Ri
+            inner_data, inner_cols, inner_alias, inner_idx = Ldata, Lcols, left_alias, Li
 
-        idx_col = right_join_col if inner_table == right_table else left_join_col
-        if inner_table in self.index and idx_col in self.index[inner_table]:
-            btree = self.index[inner_table][idx_col]["tree"]
-            inner_index = {
-                key: [inner_data[rid] for rid in btree[key]] for key in btree
-            }
-        else:
-            inner_index = {}
-            for row in inner_data:
-                key = row[inner_idx]
-                inner_index.setdefault(key, []).append(row)
+        inner_index = defaultdict(list)
+        for row in inner_data:
+            key = row[inner_idx]
+            inner_index[key].append(row)
+
+
         if callable(where):
             match_fn = where
         else:
-            match_fn = _make_where_fn(where, outer_cols + inner_cols)
+
+            qualified = [f"{outer_alias}.{c}" for c in outer_cols] + [f"{inner_alias}.{c}" for c in inner_cols]
+            match_fn = _make_where_fn(where, qualified)
+
 
         results = []
         for o_row in outer_data:
             key = o_row[outer_idx]
-            if key not in inner_index:
-                continue
-            for i_row in inner_index[key]:
-
+            for i_row in inner_index.get(key, []):
+    
                 j = {}
                 for i, col in enumerate(outer_cols):
                     j[f"{outer_alias}.{col}"] = o_row[i]
-                    j[col] = o_row[i]
                 for i, col in enumerate(inner_cols):
                     j[f"{inner_alias}.{col}"] = i_row[i]
-                    j[col] = i_row[i]
 
                 if not match_fn(j):
                     continue
@@ -514,48 +474,32 @@ class DMLManager:
                 if columns is None:
                     results.append(j)
                 else:
-                    row_out = {}
-                    for c in columns:
-                        if c in j:
-                            row_out[c] = j[c]
-                    results.append(row_out)
+                    results.append({c: j[c] for c in columns if c in j})
 
-        if columns:
-            results = [
-                {col: row[col] for col in columns if col in row} for row in results
-            ]
 
-        group_by_res = []
         if group_by is not None:
             group_by_res = utils.group_by(results, group_by)
-        else:
-            group_by_res = results
+            if aggregates:
+                aggregates_res = utils.aggregation(group_by_res, aggregates, group_by)
+                if having:
+                    having_fn = having if callable(having) else _make_where_fn(having, group_by_res[0].keys())
+                    aggregates_res = [r for r in aggregates_res if having_fn(r)]
+                results = aggregates_res
+            else:
 
-        aggregates_res = []
-        if (
-            group_by is not None and aggregates is not None
-        ):  # needs group by to eliminate ambiguity
-            aggregates_res = utils.aggregation(group_by_res, aggregates, group_by)
-            if having:
-                if callable(having):
-                    having_fn = having
-                else:
-                    having_fn = _make_where_fn(having, outer_cols + inner_cols)
-                aggregates_res = [row for row in aggregates_res if having_fn(row)]
-        else:
-            if isinstance(group_by_res, defaultdict):
-                group_by_res = [
-                    {
-                        **{group_by[i]: group_key[i] for i in range(len(group_key))},
-                        **group_rows[0],
-                    }
-                    for group_key, group_rows in group_by_res.items()
+                results = [
+                    {**dict(zip(group_by, key)), **rows[0]}
+                    for key, rows in group_by_res.items()
                 ]
-            aggregates_res = group_by_res
+        else:
+
+            if aggregates:
+                results = utils.aggregation(results, aggregates, [])
+                if having:
+                    having_fn = having if callable(having) else _make_where_fn(having, results[0].keys())
+                    results = [r for r in results if having_fn(r)]
 
         if order_by:
-            results = utils.order_by(aggregates_res, order_by)
-        else:
-            results = aggregates_res
+            results = utils.order_by(results, order_by)
 
         return results
