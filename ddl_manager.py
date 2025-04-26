@@ -87,19 +87,11 @@ class DDLManager:
         self.storage_manager.save_index()
 
     def create_table(self, table_name, columns, primary_key, foreign_keys=None):
-        """
-        Creates a new table with specified columns, primary key, and foreign keys.
-        `columns` should be a list of tuples like [('id', 'INT'), ('name', 'STRING'), ('age', 'INT')]
-        foreign_keys should be a list of tuples, e.g., [('column_name', 'referenced_table', 'referenced_column')]
-        """
-        # Ensure we have the latest data
         self.reload()
 
-        # Check for duplicates
         if table_name in self.db["TABLES"]:
             raise ValueError(f"Table '{table_name}' already exists")
 
-        # Validate column types
         valid_types = {INT, STRING, DOUBLE}
         for col_name, col_type in columns:
             if col_type not in valid_types:
@@ -107,7 +99,7 @@ class DDLManager:
                     f"Invalid column type '{col_type}' for column '{col_name}'. Valid types are: {valid_types}"
                 )
 
-        # Add table to the database
+        
         self.db["TABLES"][table_name] = {
             "primary_key": primary_key,
             "foreign_keys": foreign_keys or [],
@@ -117,12 +109,12 @@ class DDLManager:
         }
         self.db["DATA"][table_name] = []
 
-        # Initialize index dictionary for the table
+       
         self.index[table_name] = {}
 
-        # Create index only for the primary key
+        
         self.create_index(table_name, primary_key)
-        # Validate foreign key references
+
         if foreign_keys:
             for _, ref_table, ref_col in foreign_keys:
                 if ref_table not in self.db["TABLES"]:

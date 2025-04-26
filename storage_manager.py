@@ -5,7 +5,7 @@ from BTrees.OOBTree import OOBTree
 
 
 class StorageManager:
-    """Store tables, data, and index using BTree in-memory, but flatten to dict on disk."""
+ 
 
     def __init__(self, db_file="./data/database.pkl", index_file="./data/index.pkl"):
 
@@ -28,22 +28,16 @@ class StorageManager:
         self.index = self.load_index()
 
     def load_db(self):
-        """Loads the entire database from a single pickle file."""
+   
         with open(self.db_file, "rb") as f:
             return pickle.load(f)
 
     def save_db(self):
-        """Dumps the entire database to a single pickle file."""
         with open(self.db_file, "wb") as f:
             pickle.dump(self.db, f)
 
     def load_index(self):
-        """
-        Loads the flattened index dict from disk, and rebuilds OOBTrees in memory.
-        On disk we store a dict:
-            { table: { column: { key: [row_id, ...], ... }, ... }, ... }
-        Here we read that, then for each (table,column) build a new OOBTree.
-        """
+
         if not os.path.exists(self.index_file):
             return {}
 
@@ -64,11 +58,7 @@ class StorageManager:
         return idx
 
     def save_index(self):
-        """
-        Flattens each in-memory OOBTree into a plain dict and writes one file.
-        Structure on disk:
-           { table: { column: { key: [row_id, ...], ... }, ... }, ... }
-        """
+      
         flat = {}
         for table, cols in self.index.items():
             flat.setdefault(table, {})

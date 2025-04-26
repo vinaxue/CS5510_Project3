@@ -41,15 +41,9 @@ class QueryManager:
         self.numeric_literal = float_literal | Combine(Optional(oneOf("+ -")) + integer)
         # self.numeric_literal = Combine(Optional(oneOf("+ -")) + integer)
         self.string_literal = quotedString.setParseAction(removeQuotes)
-        # self.constant = self.numeric_literal | self.string_literal
-        # self.numeric_literal.setParseAction(
-        #     lambda t: int(t[0]) if t[0].isdigit() else float(t[0])
-        # )
+       
         self.constant = float_literal | integer | self.string_literal
-        # .setParseAction(
-        #     lambda t: print(f"[CONSTANT PARSED]: {t[0]} ({type(t[0])})") or t
-        # )
-
+     
         self.ASC = CaselessKeyword("ASC")
         self.DESC = CaselessKeyword("DESC")
 
@@ -118,11 +112,8 @@ class QueryManager:
 
         self.select_stmt = Forward()
 
-        # --- Multi-condition WHERE support begins ---
-        # Placeholder for recursive condition definition
         self.condition = Forward()
 
-        # Define a single simple condition: qualified_identifier operator (constant | qualified_identifier)
         identifier_or_agg = agg_func | self.qualified_identifier
         value_expr = self.constant | identifier_or_agg
 
@@ -295,13 +286,12 @@ class QueryManager:
           - ['col', 'op', val]        (simple condition)
           - [simple_cond, logic, sub, ...] (chained)
         """
-        # --- Detect pure simple-condition case ---
-        # tokens might be a ParseResults or list of exactly 3 strings/numbers
+     
         if len(tokens) == 3 and isinstance(tokens[0], str):
             simple = tokens  # ['col', 'op', raw]
             rest = []
         else:
-            # tokens[0] is a simple_condition group, rest are [logic, subcond, logic, subcond...]
+          
             simple = tokens[0]
             rest = tokens[1:]
 
@@ -311,16 +301,7 @@ class QueryManager:
             # func_name, col_name = col[0], col[1]
             col = col[1]    
         val = raw
-        # Convert raw literal to int/float if possible
-        # try:
-        #     val = int(raw)
-        # except:
-        #     try:
-        #         val = float(raw)
-        #     except:
-        #         val = raw
-
-        # Build the first (innermost) comparison function
+   
         if op == "=":
             funcs = [lambda row, c=col, v=val: row.get(c) == v]
         elif op == "!=":
@@ -365,16 +346,7 @@ class QueryManager:
 
     @track_time
     def execute_query(self, query: str):
-        """
-        Execute a SQL statement. Supports:
-        - CREATE TABLE / CREATE INDEX
-        - DROP TABLE / DROP INDEX
-        - INSERT
-        - SELECT (with optional JOIN and WHERE)
-        - DELETE
-        - UPDATE
-        """
-        # Parse one or more statements
+
         parsed_queries = self.parse_query(query)
 
         for parsed in parsed_queries:
@@ -580,12 +552,3 @@ if __name__ == "__main__":
  ;
     """
 
-    try:
-        parse_results = qm.parse_query(multi_query)
-        for i, res in enumerate(parse_results, start=1):
-            print(f"语句 {i} 解析成功:")
-            print(res)
-            print(type(res[4][1][2]))
-            print("-" * 50)
-    except Exception as e:
-        print("解析错误:", e)

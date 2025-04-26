@@ -6,7 +6,6 @@ import utils
 
 
 class DMLManager:
-    """Execute data manipulation queries: INSERT, DELETE, UPDATE, SELECT, and optimized JOIN SELECT"""
 
     def __init__(self, storage_manager):
         self.storage_manager = storage_manager
@@ -19,19 +18,6 @@ class DMLManager:
         self.storage_manager.load_index()
 
     def insert(self, table_name, row):
-        """
-        Inserts a new row into the specified table, checking for duplicate entries,
-        verifying that each value matches the expected column type, and ensuring
-        foreign key references exist.
-        Supports types: int, string, and double (float).
-        Optimized using the primary key index if available.
-
-        :param table_name: The name of the table.
-        :param row: A list representing a row of data.
-        :raises ValueError: If the table does not exist, row length is incorrect,
-                            a duplicate primary key is found, a column's type does not match,
-                            or a foreign key reference does not exist.
-        """
         self.reload()
 
         # Validate table existence
@@ -167,17 +153,7 @@ class DMLManager:
         having=None,
         order_by=None,
     ):
-        """
-        Selects rows from a table based on optional filtering and aggregation.
-        :param table_name: The name of the table.
-        :param columns: List of columns to select. If None, selects all columns.
-        :param where: None | list | dict | callable(row_dict)->bool
-        :param group_by: List of columns to group by. If None, no grouping is applied.
-        :param having: Optional filtering condition after aggregation. Same types as `where`.
-        :param aggregates: Dictionary of aggregate functions to apply, e.g., {"SUM": "column_name"}.
-        :param order_by: tuple of columns to order by, e.g., [("name", "ASC"), ("age", "DESC")].
-        :return: A list of dictionaries representing the selected rows.
-        """
+    
         self.reload()
 
         # Validate table existence
@@ -258,18 +234,7 @@ class DMLManager:
         return results
 
     def delete(self, table_name, where=None):
-        """
-        Deletes rows from a table.
-        :param table_name: The name of the table.
-        :param where:
-            - None: delete all rows
-            - list [col, op, val]: single simple condition
-            - dict {"op":"AND"/"OR", "left":..., "right":...}:
-            - callable(row_dict)->bool:
-        :return: Number of rows deleted.
-        """
 
-        # 1. Reload data and validate table
         self.reload()
         if table_name not in self.db["TABLES"]:
             raise ValueError(f"Table '{table_name}' does not exist")
@@ -324,11 +289,8 @@ class DMLManager:
         col_idx = {c: i for i, c in enumerate(col_names)}
         primary_key = self.db["TABLES"][table_name].get("primary_key")
 
-        # 2. Wrap `where` so that if it's a dict->bool function, we convert row list to dict
         where_fn = _make_where_fn(where, col_names)
 
-        # 3. Perform updates
-        # First pass — simulate new values, check for primary key duplicates
         updated_pks = set()
         existing_pks = {row[col_idx[primary_key]] for row in data}
 
@@ -356,7 +318,6 @@ class DMLManager:
                             )
                         updated_pks.add(new_pk)
 
-        # Second pass — actually apply updates
         update_count = 0
         for idx, row in enumerate(data):
             if where_fn is None or where_fn(row):
@@ -369,9 +330,8 @@ class DMLManager:
                 data[idx] = new_row
                 update_count += 1
 
-        # 4. Rebuild indexes for this table if they exist
         if table_name in self.index:
-            # reset each index entry to {"tree": OOBTree(), "name": ...}
+
             for col, info in list(self.index[table_name].items()):
                 name = (
                     info.get("name", f"{table_name}_{col}_idx")
@@ -379,7 +339,7 @@ class DMLManager:
                     else f"{table_name}_{col}_idx"
                 )
                 self.index[table_name][col] = {"tree": OOBTree(), "name": name}
-            # reinsert all rows
+
             for rid, row in enumerate(data):
                 for col, info in self.index[table_name].items():
                     tree = info["tree"]
@@ -388,7 +348,6 @@ class DMLManager:
                         tree[val] = []
                     tree[val].append(rid)
 
-        # 5. Save changes
         self.storage_manager.save_db()
         self.storage_manager.save_index()
 
@@ -409,11 +368,7 @@ class DMLManager:
         having=None,
         aggregates=None,
     ):
-        """
-        Hash-based SELECT JOIN: always iterate smaller table as outer,
-        build an in-memory hash on the join column of the larger table.
-        完全不使用索引。
-        """
+     
         self.reload()
 
 
