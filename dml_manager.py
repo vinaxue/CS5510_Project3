@@ -144,16 +144,15 @@ class DMLManager:
         self.storage_manager.save_index()
 
     def select(
-        self,
-        table_name,
-        columns=None,
-        where=None,
-        group_by=None,
-        aggregates=None,
-        having=None,
-        order_by=None,
+            self,
+            table_name,
+            columns=None,
+            where=None,
+            group_by=None,
+            aggregates=None,
+            having=None,
+            order_by=None,
     ):
-    
         self.reload()
 
         # Validate table existence
@@ -174,25 +173,46 @@ class DMLManager:
         col_names = list(table_columns.keys())
         table_data = self.db["DATA"][table_name]
 
-        if callable(where):
-            where_fn = where
-        else:
-            where_fn = _make_where_fn(where, col_names)
+        # Check if there's an index on the column used in the 'where' condition
+        use_index = False
+        where_column = None
+        if where and isinstance(where, dict):
+            where_column = next((col for col in where if col in col_names), None)
+            if where_column and where_column in self.index.get(table_name, {}):
+                use_index = True
 
         filtered_rows = []
-        for row_list in table_data:
-            row_dict = {}
-            for col, raw in zip(col_names, row_list):
-                col_type = table_columns[col]
-                if col_type == INT:
-                    row_dict[col] = int(raw)
-                elif col_type == DOUBLE:
-                    row_dict[col] = float(raw)
-                else:  # STRING
-                    row_dict[col] = raw
 
-            if where_fn(row_dict):
-                filtered_rows.append(row_dict)
+        if use_index and where_column:
+            # Use the index for faster search
+            index_tree = self.index[table_name][where_column]["tree"]
+            for key, row_ids in index_tree.items():
+                # Apply where condition on indexed rows
+                for row_id in row_ids:
+                    row = table_data[row_id]
+                    row_dict = {col_names[i]: row[i] for i in range(len(row))}
+                    if where_fn(row_dict):
+                        filtered_rows.append(row_dict)
+        else:
+            # If no index is available, scan all rows
+            if callable(where):
+                where_fn = where
+            else:
+                where_fn = _make_where_fn(where, col_names)
+
+            for row_list in table_data:
+                row_dict = {}
+                for col, raw in zip(col_names, row_list):
+                    col_type = table_columns[col]
+                    if col_type == INT:
+                        row_dict[col] = int(raw)
+                    elif col_type == DOUBLE:
+                        row_dict[col] = float(raw)
+                    else:  # STRING
+                        row_dict[col] = raw
+
+                if where_fn(row_dict):
+                    filtered_rows.append(row_dict)
 
         if columns:
             filtered_rows = [
@@ -368,9 +388,7 @@ class DMLManager:
         having=None,
         aggregates=None,
     ):
-     
         self.reload()
-
 
         if left_table not in self.db["TABLES"] or right_table not in self.db["TABLES"]:
             raise ValueError("One or both tables do not exist.")
@@ -378,7 +396,6 @@ class DMLManager:
             raise ValueError(f"Column '{left_join_col}' does not exist in '{left_table}'.")
         if right_join_col not in self.db["COLUMNS"][right_table]:
             raise ValueError(f"Column '{right_join_col}' does not exist in '{right_table}'.")
-
 
         if left_alias is None or right_alias is None:
             if left_table == right_table:
@@ -391,6 +408,7 @@ class DMLManager:
         Ldata, Rdata = self.db["DATA"][left_table], self.db["DATA"][right_table]
         Li, Ri = Lcols.index(left_join_col), Rcols.index(right_join_col)
 
+        # Determine which table has fewer rows and set it as the outer data (to minimize the number of iterations)
         if len(Ldata) <= len(Rdata):
             outer_data, outer_cols, outer_alias, outer_idx = Ldata, Lcols, left_alias, Li
             inner_data, inner_cols, inner_alias, inner_idx = Rdata, Rcols, right_alias, Ri
@@ -398,25 +416,32 @@ class DMLManager:
             outer_data, outer_cols, outer_alias, outer_idx = Rdata, Rcols, right_alias, Ri
             inner_data, inner_cols, inner_alias, inner_idx = Ldata, Lcols, left_alias, Li
 
+        # Use index for the inner table if available
         inner_index = defaultdict(list)
-        for row in inner_data:
-            key = row[inner_idx]
-            inner_index[key].append(row)
+        if right_join_col in self.index.get(right_table, {}):
+            # Use index for inner table (if available)
+            inner_index_tree = self.index[right_table][right_join_col]["tree"]
+            for key, row_ids in inner_index_tree.items():
+                for row_id in row_ids:
+                    inner_index[key].append(Rdata[row_id])
+        else:
+            # Fall back to scanning the entire inner table if no index exists
+            for row in inner_data:
+                key = row[inner_idx]
+                inner_index[key].append(row)
 
-
+        # Prepare the where function if applicable
         if callable(where):
             match_fn = where
         else:
-
             qualified = [f"{outer_alias}.{c}" for c in outer_cols] + [f"{inner_alias}.{c}" for c in inner_cols]
             match_fn = _make_where_fn(where, qualified)
 
-
+        # Perform the join using the inner index (or full scan if no index exists)
         results = []
         for o_row in outer_data:
             key = o_row[outer_idx]
             for i_row in inner_index.get(key, []):
-    
                 j = {}
                 for i, col in enumerate(outer_cols):
                     j[f"{outer_alias}.{col}"] = o_row[i]
@@ -431,7 +456,7 @@ class DMLManager:
                 else:
                     results.append({c: j[c] for c in columns if c in j})
 
-
+        # Handle group by and aggregation
         if group_by is not None:
             group_by_res = utils.group_by(results, group_by)
             if aggregates:
@@ -441,19 +466,18 @@ class DMLManager:
                     aggregates_res = [r for r in aggregates_res if having_fn(r)]
                 results = aggregates_res
             else:
-
                 results = [
                     {**dict(zip(group_by, key)), **rows[0]}
                     for key, rows in group_by_res.items()
                 ]
         else:
-
             if aggregates:
                 results = utils.aggregation(results, aggregates, [])
                 if having:
                     having_fn = having if callable(having) else _make_where_fn(having, results[0].keys())
                     results = [r for r in results if having_fn(r)]
 
+        # Apply ordering if specified
         if order_by:
             results = utils.order_by(results, order_by)
 
